@@ -29,6 +29,13 @@ SimplePatternList gPatterns = {
 
 uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
 
+// Hacky gross code for effects that understand the physical object
+
+// Format:
+// Index 0 - NUM_SEGMENTS
+// index 1..NUM_SEGMENTS (inclusive): start index for each segment
+// Remaining indices: pixel in panel
+
 const PROGMEM uint8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
   {
     8,  10,  18,  37,  50,  59,  68,  70,  72,  74,
@@ -116,28 +123,23 @@ const PROGMEM uint8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
 
 #define WAIT 30
 
+#define OFFSET_HUE(panel, hue) ( (hue) + (256/PANELS)*panel )
+
 #define BPM  8
-uint8_t gHue = 0; // rotating "base color" used by many of the patterns
+uint8_t gHue = 0;
 
 void setup() {
 	nextPattern();
 	FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
 	FastLED.setCorrection(TypicalSMD5050);
 	FastLED.setBrightness(40);
-	//gCurrentPatternNumber = EEPROM.read(PATTERN_IDX);
-	//if (gCurrentPatternNumber >= ARRAY_SIZE(gPatterns)) {
-	//	gCurrentPatternNumber = 0;
-	//}
-
-	//EEPROM.write(PATTERN_IDX, (gCurrentPatternNumber+1) % ARRAY_SIZE(gPatterns));
-
 }
 
 void rainbowSegments() {
 	uint8_t offset = gHue;
 
 	for (uint8_t panel = 0; panel < PANELS; panel++) {
-		uint8_t hue = 42*panel + offset;
+		uint8_t hue = OFFSET_HUE(panel, hue);
 		uint8_t num_segs = NUM_SEGS(panel);
 
 		for (int seg = 0; seg < num_segs; seg++) {
@@ -156,7 +158,7 @@ void chase(uint8_t hueDelta) {
 
 	for (uint8_t panel = 0; panel < PANELS; panel++) {
 		uint16_t idx = SEG_LED(panel, pos+NUM_SEGS(panel)+2);
-		leds[idx] += CHSV(hue + 42*panel, 255, 255);
+		leds[idx] += CHSV(OFFSET_HUE(panel, hue), 255, 255);
 
 		hue += hueDelta;
 	}
@@ -224,12 +226,12 @@ void pulse() {
 	uint8_t offset = 5*gHue;
 
 	for (uint8_t panel = 0; panel < PANELS; panel++) {
-		uint8_t hue = 42*panel + offset;
+		uint8_t hue = OFFSET_HUE(panel, offset);
 		uint8_t num_segs = NUM_SEGS(panel);
 
 		for (int seg = 0; seg < num_segs; seg++) {
 			FOREACH_IN_SEGMENT(panel, seg, idx) {
-				CHSV c(hue + panel*42, 255, beat);
+				CHSV c(OFFSET_HUE(panel, hue), 255, beat);
 				leds[SEG_LED(panel, idx)] = c;
 				hue += 15;
 			}
@@ -250,7 +252,7 @@ void flickerSegments() {
 
 		uint8_t panel = random16(PANELS);
 
-		uint8_t hue = 42*panel + offset;
+		uint8_t hue = OFFSET_HUE(panel, offset);
 		uint8_t num_segs = NUM_SEGS(panel);
 
 		int seg = random16(num_segs);
