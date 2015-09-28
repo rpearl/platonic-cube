@@ -9,23 +9,58 @@
 #define PANELS 6
 #define DATA_PIN 6
 
-#define PATTERN_IDX 1
+#define NUM_SEGS(panel) (pgm_read_byte(&segments[panel][0]))
+
+#define SEG_FIRST(panel, seg) (pgm_read_byte(&segments[panel][(seg)+1]))
+#define SEG_LAST(panel, seg) (pgm_read_byte(&segments[panel][(seg)+2]))
+
+#define PIXEL_IN_PANEL(panel, pixel) (((panel)*LEDS_PER_PANEL) + (pixel))
+
+#define SEG_LED(panel, idx) PIXEL_IN_PANEL(panel, pgm_read_byte(&segments[panel][idx]))
+
+#define FOREACH_IN_SEGMENT(panel, seg, idx) \
+	for (uint8_t idx = SEG_FIRST(panel, seg); idx < SEG_LAST(panel, seg); idx++)
+
+#define WAIT 30
+
+#define OFFSET_HUE(panel, hue) ( (hue) + (256/PANELS)*panel )
+
+#define BPM  8
 
 #define NUM_LEDS (LEDS_PER_PANEL * PANELS)
-#define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
 
+#define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
+//something more crawly
+
+//like flicker but in order?
 CRGB leds[NUM_LEDS];
 
 typedef void (*SimplePatternList[])();
+typedef void (*SimplePattern)();
+
+#define SINGLE_PATTERN_DEBUG
+
+//TODO: generalize pattern list
+SimplePatternList gTransitions = {rainbowSegments, pulse, fillSolid};
+
 SimplePatternList gPatterns = {
+	rainbowTrail,
+	crawlWithHighlight,
+	pulseSegments,
 	chaseRainbow,
 	flickerSegments,
-	pulse,
 	chaseSolid,
 	sweepTwoSolid,
-	rainbowSegments,
 	sweepTwoRainbow,
 };
+
+#define NUM_CUES 7
+#define SECONDS_PER_CUE 30
+
+#define TRANSITION_CHANGE_CUE 0
+#define PATTERN_CHANGE_CUE 1
+
+uint8_t gCurrentCue = 0;
 
 uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
 
@@ -109,37 +144,195 @@ const PROGMEM uint8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
 
 };
 
-#define NUM_SEGS(panel) (pgm_read_byte(&segments[panel][0]))
-
-#define SEG_FIRST(panel, seg) (pgm_read_byte(&segments[panel][(seg)+1]))
-#define SEG_LAST(panel, seg) (pgm_read_byte(&segments[panel][(seg)+2]))
-
-#define PIXEL_IN_PANEL(panel, pixel) (((panel)*LEDS_PER_PANEL) + (pixel))
-
-#define SEG_LED(panel, idx) PIXEL_IN_PANEL(panel, pgm_read_byte(&segments[panel][idx]))
-
-#define FOREACH_IN_SEGMENT(panel, seg, idx) \
-	for (uint8_t idx = SEG_FIRST(panel, seg); idx < SEG_LAST(panel, seg); idx++)
-
-#define WAIT 30
-
-#define OFFSET_HUE(panel, hue) ( (hue) + (256/PANELS)*panel )
-
-#define BPM  8
 uint8_t gHue = 0;
 
+unsigned int bitOut(void)
+{
+	static unsigned long firstTime=1, prev=0;
+	unsigned long bit1=0, bit0=0, x=0, port=0, limit=99;
+	if (firstTime)
+	{
+		firstTime=0;
+		prev=analogRead(port);
+	}
+	while (limit--)
+	{
+		x=analogRead(port);
+		bit1=(prev!=x?1:0);
+		prev=x;
+		x=analogRead(port);
+		bit0=(prev!=x?1:0);
+		prev=x;
+		if (bit1!=bit0)
+			break;
+	}
+	return bit1;
+}
+unsigned long seedOut(unsigned int noOfBits)
+{
+	// return value with 'noOfBits' random bits set
+	unsigned long seed=0;
+	for (int i=0;i<noOfBits;++i)
+		seed = (seed<<1) | bitOut();
+	return seed;
+}
+
 void setup() {
-	nextPattern();
+	random16_set_seed(seedOut(16));
+	nextCue();
 	FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
 	FastLED.setCorrection(TypicalSMD5050);
 	FastLED.setBrightness(40);
 }
 
+enum { GETTING_DARKER = 0, GETTING_BRIGHTER = 1 };
+uint8_t pulseSegmentDirections[(NUM_LEDS+7)/8];
+bool getPixelDirection(uint16_t i) {
+	uint16_t index = i / 8;
+	uint8_t  bitNum = i & 0x07;
+	// using Arduino 'bitRead' function; expanded code below
+	return bitRead(pulseSegmentDirections[index], bitNum);
+}
+void setPixelDirection(uint16_t i, bool dir) {
+	uint16_t index = i / 8;
+	uint8_t  bitNum = i & 0x07;
+	// using Arduino 'bitWrite' function; expanded code below
+	bitWrite( pulseSegmentDirections[index], bitNum, dir);
+}
+
+
+CRGB makeBrighter( const CRGB& color, fract8 howMuchBrighter) {
+	CRGB incrementalColor = color;
+	incrementalColor.nscale8( howMuchBrighter);
+	return color + incrementalColor;
+}
+
+CRGB makeDarker( const CRGB& color, fract8 howMuchDarker) {
+	CRGB newcolor = color;
+	newcolor.nscale8( 255 - howMuchDarker);
+	return newcolor;
+}
+
+void brightenOrDarkenEachPixel( fract8 fadeUpAmount, fract8 fadeDownAmount) {
+	for( uint16_t i = 0; i < NUM_LEDS; i++) {
+		if( getPixelDirection(i) == GETTING_DARKER) {
+			// This pixel is getting darker
+			leds[i] = makeDarker( leds[i], fadeDownAmount);
+		} else {
+			// This pixel is getting brighter
+			leds[i] = makeBrighter( leds[i], fadeUpAmount);
+			// now check to see if we've maxxed out the brightness
+			if( leds[i].r == 255 || leds[i].g == 255 || leds[i].b == 255) {
+				// if so, turn around and start getting darker
+				setPixelDirection(i, GETTING_DARKER);
+			}
+		}
+	}
+}
+#define STARTING_BRIGHTNESS 64
+#define FADE_IN_SPEED       28
+#define FADE_OUT_SPEED      16
+
+#define DENSITY 25
+
+void pulseSegments() {
+	brightenOrDarkenEachPixel(FADE_IN_SPEED, FADE_OUT_SPEED);
+
+	for (uint8_t panel = 0; panel < PANELS; panel++) {
+		uint8_t num_segs = NUM_SEGS(panel);
+
+		if (random8() < DENSITY) {
+			uint8_t seg = random16(num_segs);
+			FOREACH_IN_SEGMENT(panel, seg, idx) {
+				uint16_t i = SEG_LED(panel, idx);
+				if (!leds[i]) {
+					leds[i] = CHSV(OFFSET_HUE(panel, gHue), 255, STARTING_BRIGHTNESS);
+					setPixelDirection(i, GETTING_BRIGHTER);
+				}
+			}
+		}
+	}
+}
+
+void crawlWithHighlight() {
+	uint8_t offset = 5*gHue;
+	uint16_t pos = beatsin16(BPM, 0, LEDS_PER_PANEL);
+	fadeToBlackBy(leds, NUM_LEDS, 25);
+	for (uint8_t panel = 0; panel < PANELS; panel++) {
+		uint8_t hue = OFFSET_HUE(panel, offset);
+		uint8_t num_segs = NUM_SEGS(panel);
+
+		uint16_t offset_pos = pos + num_segs+2;
+
+		uint16_t seg;
+		for (seg = 0; seg < num_segs; seg++) {
+			if (offset_pos <= SEG_LAST(panel, seg))
+				break;
+		}
+
+		FOREACH_IN_SEGMENT(panel, seg, idx) {
+			uint8_t bright = 192;
+			if (offset_pos == idx)
+				bright = 255;
+			CHSV c(OFFSET_HUE(panel, hue), 255, bright);
+			leds[SEG_LED(panel, idx)] = c;
+			hue += 15;
+		}
+	}
+}
+
+bool samesign(uint16_t a, uint16_t b) {
+	return (a >= 0 && b >= 0) || (a <= 0 && b <= 0);
+}
+
+
+void rainbowTrail() {
+	uint8_t offset = 5*gHue;
+	int16_t pos = beatsin16(BPM, 0, LEDS_PER_PANEL);
+	int16_t direction = beatsin16(BPM, -LEDS_PER_PANEL, LEDS_PER_PANEL, 0, 16384);
+
+	fadeToBlackBy(leds, NUM_LEDS, 5);
+	for (uint8_t panel = 0; panel < PANELS; panel++) {
+		uint8_t hue = OFFSET_HUE(panel, offset);
+		uint8_t num_segs = NUM_SEGS(panel);
+
+		uint16_t offset_pos = pos + num_segs+2;
+
+		uint16_t seg;
+		for (seg = 0; seg < num_segs; seg++) {
+			if (offset_pos <= SEG_LAST(panel, seg))
+				break;
+		}
+
+		FOREACH_IN_SEGMENT(panel, seg, idx) {
+			uint8_t bright = 0;
+
+			if (direction >= 0 && offset_pos > idx) {
+				bright = 192;
+			} else if (direction <= 0 && offset_pos < idx) {
+				bright = 192;
+			}
+
+			if (offset_pos == idx) {
+				bright = 255;
+			}
+
+			if (bright) {
+				CHSV c(OFFSET_HUE(panel, hue), 255, bright);
+				leds[SEG_LED(panel, idx)] = c;
+			}
+			hue += 15;
+		}
+	}
+}
+
+
+
 void rainbowSegments() {
 	uint8_t offset = gHue;
 
 	for (uint8_t panel = 0; panel < PANELS; panel++) {
-		uint8_t hue = OFFSET_HUE(panel, hue);
+		uint8_t hue = OFFSET_HUE(panel, offset);
 		uint8_t num_segs = NUM_SEGS(panel);
 
 		for (int seg = 0; seg < num_segs; seg++) {
@@ -268,20 +461,51 @@ void flickerSegments() {
  	fadeToBlackBy( leds, NUM_LEDS, 25);
 }
 
-void nextPattern() {
-	gCurrentPatternNumber = random16(ARRAY_SIZE(gPatterns));
+void fillSolid() {
+	uint8_t bright = beatsin16(BPM, 128, 255);
+	for (uint8_t panel = 0; panel < PANELS; panel++) {
+		fill_solid(
+			&leds[PIXEL_IN_PANEL(panel, 0)],
+			LEDS_PER_PANEL,
+			CHSV(OFFSET_HUE(panel, gHue), 255, bright)
+		);
+	}
 }
 
-void loop() {
-	//flickerSegments();
-	//pulse();
-	//chase();
-	gPatterns[gCurrentPatternNumber]();
+void nextCue() {
+#ifndef SINGLE_PATTERN_DEBUG
+	gCurrentCue = (gCurrentCue + 1) % NUM_CUES;
+
+	if (gCurrentCue == TRANSITION_CHANGE_CUE) {
+		gCurrentPatternNumber = random16(ARRAY_SIZE(gTransitions));
+	} else if (gCurrentCue == PATTERN_CHANGE_CUE) {
+		gCurrentPatternNumber = random16(ARRAY_SIZE(gPatterns));
+	}
+#else
+	gCurrentCue = PATTERN_CHANGE_CUE;
+	gCurrentPatternNumber = 0;
+#endif
+}
+
+void showCurrentPattern() {
+	if (gCurrentCue == TRANSITION_CHANGE_CUE) {
+		gTransitions[gCurrentPatternNumber]();
+	} else {
+		gPatterns[gCurrentPatternNumber]();
+	}
 	FastLED.show();
 	FastLED.delay(WAIT);
+}
 
-	EVERY_N_MILLISECONDS( 20 ) { gHue++; }
 
-	EVERY_N_SECONDS( 60*5 ) { nextPattern(); }
+void loop() {
+	showCurrentPattern();
 
+	EVERY_N_MILLISECONDS(20) {
+		gHue++;
+	}
+
+	EVERY_N_SECONDS(SECONDS_PER_CUE) {
+		nextCue();
+	}
 }
