@@ -34,7 +34,7 @@
 //something more crawly
 
 uint32_t get_millisecond_timer() {
-	return millis() * 5 / 2;
+	return millis() / 2.5;
 }
 
 //like flicker but in order?
@@ -497,7 +497,7 @@ void nextCue() {
 }
 
 void showCurrentPattern() {
-	uint64_t start = millis();
+	uint64_t start = get_millisecond_timer();
 	if (gCurrentCue == TRANSITION_CHANGE_CUE) {
 		gTransitions[gCurrentPatternNumber]();
 	} else {
