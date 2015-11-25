@@ -77,12 +77,13 @@ CRGB leds[NUM_LEDS];
 typedef void (*SimplePatternList[])();
 typedef void (*SimplePattern)();
 
-//#define SINGLE_PATTERN_DEBUG
+#define SINGLE_PATTERN_DEBUG
 
 //TODO: generalize pattern list
 SimplePatternList gTransitions = {rainbowSegments, pulse, fillSolid};
 
 SimplePatternList gPatterns = {
+	testPattern,
 	chaseThroughPanels,
 	rainbow,
 	pulseSegments,
@@ -654,6 +655,20 @@ void shootRing(uint8_t z, uint8_t hue) {
 					hue += 5;
 				}
 			}
+		}
+	}
+}
+
+void testPattern() {
+	Vector3f accelDir = readAccelerometerDirection();
+
+	for (uint8_t panel = 0; panel < PANELS; panel++) {
+		CRGB c = CRGB::Black;
+		if (dot(normals[panel], accelDir) > 0.25) {
+			c = CRGB::Blue;
+		}
+		for (uint8_t i = 0; i < LEDS_PER_PANEL; i++) {
+			leds[PIXEL_IN_PANEL(panel, i)] = c;
 		}
 	}
 }
