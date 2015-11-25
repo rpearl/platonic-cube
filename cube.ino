@@ -12,8 +12,66 @@ extern "C" {
 uint32_t get_millisecond_timer() {
 	return millis() / 2.5;
 }
+/*
+Vector3f normals[PANELS] = {
+	//0 is the (x,z) plane at y=7
+	Vector3f( 0.0f,  1.0f,  0.0f),
+	//1 is the (x,y) plane at z=7
+	Vector3f( 0.0f,  0.0f,  1.0f),
+	//2 is the (y,z) plane at x=7
+	Vector3f( 1.0f,  0.0f,  0.0f),
+	//3 is the (x,y) plane at z=0
+	Vector3f( 0.0f,  0.0f, -1.0f),
+	//4 is the (y,z) plane at x=0
+	Vector3f(-1.0f,  0.0f,  0.0f),
+	//5 is the (x,z) plane at y=0
+	Vector3f( 0.0f, -1.0f,  0.0f)
+};
+*/
+Vector3f normals[PANELS] = {
+	Vector3f( 0.0f,  1.0f,  0.0f),
+	Vector3f( 1.0f,  0.0f,  0.0f),
+	Vector3f( 1.0f,  0.0f,  0.0f),
+	Vector3f( 0.0f,  0.0f, -1.0f),
+	Vector3f(-1.0f,  0.0f,  0.0f),
+	Vector3f( 0.0f, -1.0f,  0.0f)
+};
 
-//like flicker but in order?
+static const int sampleSize = 10;
+int readAxis(int axisPin) {
+	long reading = 0;
+	analogRead(axisPin);
+	for (int i = 0; i < sampleSize; i++)
+	{
+		reading += analogRead(axisPin);
+	}
+	return reading/sampleSize;
+}
+static const int xInput = A1;
+static const int yInput = A2;
+static const int zInput = A3;
+
+static const int xRawMin = 419;
+static const int xRawMax = 619;
+static const int yRawMin = 403;
+static const int yRawMax = 612;
+
+static const int zRawMin = 405;
+static const int zRawMax = 609;
+
+Vector3f readAccelerometerDirection() {
+
+	int xRaw = readAxis(xInput);
+	int yRaw = readAxis(yInput);
+	int zRaw = readAxis(zInput);
+
+	int xScaled = map(xRaw, xRawMin, xRawMax, -1000, 1000);
+	int yScaled = map(yRaw, yRawMin, yRawMax, -1000, 1000);
+	int zScaled = map(zRaw, zRawMin, zRawMax, -1000, 1000);
+
+	return normalize(Vector3f(xScaled, yScaled, zScaled));
+}
+
 CRGB leds[NUM_LEDS];
 
 typedef void (*SimplePatternList[])();
