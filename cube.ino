@@ -1,37 +1,13 @@
 #define USE_GET_MILLISECOND_TIMER
 #include <FastLED.h>
-#include <EEPROM.h>
-#include <avr/pgmspace.h>
+#include "cube.h"
+#include "Vector.h"
 
-#define LEDS_PER_ROW 8
-#define ROWS_PER_PANEL 8
-
-#define LEDS_PER_PANEL (LEDS_PER_ROW * ROWS_PER_PANEL)
-#define PANELS 6
-#define DATA_PIN 6
-
-#define NUM_SEGS(panel) (pgm_read_byte(&segments[panel][0]))
-
-#define SEG_FIRST(panel, seg) (pgm_read_byte(&segments[panel][(seg)+1]))
-#define SEG_LAST(panel, seg) (pgm_read_byte(&segments[panel][(seg)+2]))
-
-#define PIXEL_IN_PANEL(panel, pixel) (((panel)*LEDS_PER_PANEL) + (pixel))
-
-#define SEG_LED(panel, idx) PIXEL_IN_PANEL(panel, pgm_read_byte(&segments[panel][idx]))
-
-#define FOREACH_IN_SEGMENT(panel, seg, idx) \
-	for (uint8_t idx = SEG_FIRST(panel, seg); idx < SEG_LAST(panel, seg); idx++)
-
-#define WAIT 30
-
-#define OFFSET_HUE(panel, hue) ( (hue) + (256/PANELS)*panel )
-
-#define BPM  8
-
-#define NUM_LEDS (LEDS_PER_PANEL * PANELS)
-
-#define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
-//something more crawly
+extern "C" {
+   int _getpid(){ return -1;}
+   int _kill(int pid, int sig){ return -1; }
+   int _write_r() { return -1; }
+}
 
 uint32_t get_millisecond_timer() {
 	return millis() / 2.5;
@@ -49,6 +25,8 @@ typedef void (*SimplePattern)();
 SimplePatternList gTransitions = {rainbowSegments, pulse, fillSolid};
 
 SimplePatternList gPatterns = {
+	chaseThroughPanels,
+	rainbow,
 	pulseSegments,
 	crawlWithHighlight,
 	chaseRainbow,
@@ -77,7 +55,7 @@ uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
 // index 1..NUM_SEGMENTS (inclusive): start index for each segment
 // Remaining indices: pixel in panel
 
-const PROGMEM uint8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
+const PROGMEM int8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
 { // side 11
 8, 10, 18, 37, 50, 59, 68, 70, 72, 74,
 P(2,2), P(2,1), P(2,0), P(3,0), P(4,0), P(5,0), P(6,0), P(7,0),
@@ -173,11 +151,11 @@ unsigned int bitOut(void)
 	}
 	return bit1;
 }
-unsigned long seedOut(unsigned int noOfBits)
+uint64_t seedOut(uint8_t noOfBits)
 {
 	// return value with 'noOfBits' random bits set
-	unsigned long seed=0;
-	for (int i=0;i<noOfBits;++i)
+	uint64_t seed=0;
+	for (uint8_t i=0;i<noOfBits;++i)
 		seed = (seed<<1) | bitOut();
 	return seed;
 }
@@ -289,8 +267,22 @@ void crawlWithHighlight() {
 	}
 }
 
-bool samesign(uint16_t a, uint16_t b) {
-	return (a >= 0 && b >= 0) || (a <= 0 && b <= 0);
+void chaseThroughPanels() {
+	uint8_t panel_map[][3] = { {1,2,3} , {0,4,5} };
+
+	uint8_t point = beatsin16(3, 0, LEDS_PER_PANEL*3);
+
+	uint8_t pos = point % LEDS_PER_PANEL;
+	uint8_t panel_point = point / LEDS_PER_PANEL;
+  fadeToBlackBy( leds, NUM_LEDS, 1);
+	for (uint8_t panel_idx = 0; panel_idx < 2; panel_idx++) {
+	  uint8_t panel = panel_map[panel_idx][panel_point];
+    uint8_t num_segs = NUM_SEGS(panel);
+		uint16_t offset_pos = pos + num_segs+2;
+
+	  uint16_t pixel = SEG_LED(panel, offset_pos);
+	  leds[pixel] = CHSV(gHue * 5, 255, 255);
+  }
 }
 
 
@@ -334,8 +326,6 @@ void rainbow() {
 		}
 	}
 }
-
-
 
 void rainbowSegments() {
 	uint8_t offset = gHue;
@@ -461,9 +451,6 @@ void flickerSegments() {
 
 		FOREACH_IN_SEGMENT(panel, seg, idx) {
 			leds[SEG_LED(panel, idx)].setHue(hue);
-			if (idx % 3 == 0) {
-				FastLED.show();
-			}
 			hue += 15;
 		}
 	}
@@ -511,6 +498,106 @@ void showCurrentPattern() {
 	}
 
 	FastLED.delay(WAIT-duration);
+}
+
+void setPixel3d(uint8_t x, uint8_t y, uint8_t z, const CRGB &c) {
+	if (x == 0) {
+		leds[PIXEL_IN_PANEL(4, P(FLIP(y), z))] = c;
+	} else if (x == LEDS_PER_ROW-1) { // panel 2
+		leds[PIXEL_IN_PANEL(2, P(FLIP(y), FLIP(z)))] = c;
+	}
+
+	if (y == 0) {
+		leds[PIXEL_IN_PANEL(5, P(FLIP(x), FLIP(z)))] = c;
+	} else if (y == LEDS_PER_ROW-1) {
+		leds[PIXEL_IN_PANEL(0, P(x, FLIP(z)))] = c;
+	}
+
+	if (z == 0) {
+		leds[PIXEL_IN_PANEL(3, P(FLIP(y), FLIP(x)))] = c;
+	} else if (z == LEDS_PER_ROW-1) {
+		leds[PIXEL_IN_PANEL(1, P(FLIP(y), x))] = c;
+	}
+}
+
+void sweepPlane() {
+	fadeToBlackBy(leds, NUM_LEDS, 50);
+	uint8_t z = beatsin16(15, 0, LEDS_PER_ROW);
+
+	uint8_t hue = gHue;
+
+	for (uint8_t x = 0; x < LEDS_PER_ROW; x++) {
+		for (uint8_t y = 0; y < LEDS_PER_ROW; y++) {
+			if (x == 0 || x == LEDS_PER_ROW-1 || y == 0 || y == LEDS_PER_ROW-1) {
+				setPixel3d(x,y,z, CHSV(hue, 255, 255));
+				setPixel3d(x,y,z, CHSV(hue, 255, 255));
+				setPixel3d(x,y,LEDS_PER_ROW-z-1, CHSV(hue+128, 255, 255));
+
+				uint8_t x1 = z;
+				uint8_t y1 = x;
+				uint8_t z1 = y;
+
+				setPixel3d(x1,y1,z1, CHSV(hue, 255, 255));
+				setPixel3d(LEDS_PER_ROW-x1-1, y1, z1, CHSV(hue+128, 255, 255));
+
+/*
+				uint8_t y2 = z;
+				uint8_t x2 = y;
+				uint8_t z2 = x;
+				setPixel3d(x2,y2,z2, CHSV(hue, 255, 255));
+				setPixel3d(x2,LEDS_PER_ROW-y2-1,z2, CHSV(hue+128, 255, 255));
+*/
+				hue+=5;
+			}
+		}
+	}
+}
+
+void sweepOnePlane() {
+	fadeToBlackBy(leds, NUM_LEDS, 75);
+	uint8_t base = scale16(beat16(20), LEDS_PER_ROW+8);
+
+
+	for (uint8_t i = 0; i < LEDS_PER_ROW+8; i+= 6) {
+		shootRing((base + i) % (LEDS_PER_ROW+8), gHue+(30*i));
+	}
+}
+
+void shootRing(uint8_t z, uint8_t hue) {
+	if (z < 4) {
+		uint8_t width = z*2;
+		for (uint8_t x = 0; x < width; x++) {
+			for (uint8_t y = 0; y < width; y++) {
+				if (x == 0 || x == width-1 || y == 0 || y == width-1) {
+					uint8_t start = 4-z;
+					setPixel3d(start+x, start+y, 0, CHSV(hue, 255, 255));
+					hue += 5;
+				}
+			}
+		}
+	} else if (z >= LEDS_PER_ROW + 4) {
+		z = (LEDS_PER_ROW+8) - z - 1;
+		uint8_t width = z*2;
+		for (uint8_t x = 0; x < width; x++) {
+			for (uint8_t y = 0; y < width; y++) {
+				if (x == 0 || x == width-1 || y == 0 || y == width-1) {
+					uint8_t start = 4-z;
+					setPixel3d(start+x, start+y, LEDS_PER_ROW-1, CHSV(hue, 255, 255));
+					hue += 5;
+				}
+			}
+		}
+	} else {
+		z -= 4;
+		for (uint8_t x = 0; x < LEDS_PER_ROW; x++) {
+			for (uint8_t y = 0; y < LEDS_PER_ROW; y++) {
+				if (x == 0 || x == LEDS_PER_ROW-1 || y == 0 || y == LEDS_PER_ROW-1) {
+					setPixel3d(x,y,z, CHSV(hue, 255, 255));
+					hue += 5;
+				}
+			}
+		}
+	}
 }
 
 void loop() {
