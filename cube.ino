@@ -84,6 +84,7 @@ SimplePatternList gTransitions = {rainbowSegments, pulse, fillSolid};
 
 SimplePatternList gPatterns = {
 	testPattern,
+	makeWaves,
 	chaseThroughPanels,
 	rainbow,
 	pulseSegments,
@@ -612,17 +613,17 @@ void sweepPlane() {
 	}
 }
 
-void sweepOnePlane() {
+void makeWaves() {
 	fadeToBlackBy(leds, NUM_LEDS, 75);
 	uint8_t base = scale16(beat16(20), LEDS_PER_ROW+8);
 
 
 	for (uint8_t i = 0; i < LEDS_PER_ROW+8; i+= 6) {
-		shootRing((base + i) % (LEDS_PER_ROW+8), gHue+(30*i));
+		makeWave((base + i) % (LEDS_PER_ROW+8), gHue+(30*i));
 	}
 }
 
-void shootRing(uint8_t z, uint8_t hue) {
+void makeWave(uint8_t z, uint8_t hue) {
 	if (z < 4) {
 		uint8_t width = z*2;
 		for (uint8_t x = 0; x < width; x++) {
