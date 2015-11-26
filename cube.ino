@@ -553,16 +553,27 @@ void makeWave(uint8_t z, uint8_t hue) {
 	}
 }
 
+void setPanel(uint8_t panel, const CRGB &c) {
+	for (uint8_t i = 0; i < LEDS_PER_ROW; i++) {
+		for (uint8_t j = 0; j < LEDS_PER_ROW; j++) {
+			uint8_t x,y,z;
+			std::tie(x,y,z) = get3dCoord(panel, i, j);
+			setPixel3d(x,y,z,c);
+			leds[PIXEL_IN_PANEL(panel, P(i,j))] = CRGB::Black;
+		}
+	}
+}
+
 void testPattern() {
 	Vector3f accelDir = accelerometerDirection();
 
+	for (int i = 0; i < NUM_LEDS; i++) {
+		leds[i] = CRGB::Black;
+	}
+
 	for (uint8_t panel = 0; panel < PANELS; panel++) {
-		CRGB c = CRGB::Black;
-		if (dot(normals[panel], accelDir) > 0.25) {
-			c = CRGB::Blue;
-		}
-		for (uint8_t i = 0; i < LEDS_PER_PANEL; i++) {
-			leds[PIXEL_IN_PANEL(panel, i)] = c;
+		if (dot(normals[panel], accelDir) > 0.55) {
+			setPanel(panel, CRGB::Blue);
 		}
 	}
 }
