@@ -1,3 +1,4 @@
+/* vim: set ts=8 sts=4 et sw=4 tw=99: */
 #ifndef _CUBE_H_
 #define _CUBE_H_
 
@@ -23,7 +24,7 @@
 #define SEG_LED(panel, idx) PIXEL_IN_PANEL(panel, pgm_read_byte(&segments[panel][idx]))
 
 #define FOREACH_IN_SEGMENT(panel, seg, idx) \
-	for (uint8_t idx = SEG_FIRST(panel, seg); idx < SEG_LAST(panel, seg); idx++)
+    for (uint8_t idx = SEG_FIRST(panel, seg); idx < SEG_LAST(panel, seg); idx++)
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
 
 #define WAIT 30

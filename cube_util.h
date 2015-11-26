@@ -1,3 +1,4 @@
+/* vim: set ts=8 sts=4 et sw=4 tw=99: */
 #ifndef _UTIL_H_
 #define _UTIL_H_
 
