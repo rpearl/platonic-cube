@@ -1,7 +1,9 @@
 #define USE_GET_MILLISECOND_TIMER
+#include <tuple>
 #include <FastLED.h>
 #include "cube.h"
 #include "Vector.h"
+#include "cube_util.h"
 #include "accel.h"
 
 extern "C" {
@@ -13,30 +15,6 @@ extern "C" {
 uint32_t get_millisecond_timer() {
 	return millis() / 2.5;
 }
-Vector3f normals[PANELS] = {
-	//0 is the (x,z) plane at y=7
-	Vector3f( 0.0f,  1.0f,  0.0f),
-	//1 is the (x,y) plane at z=7
-	Vector3f( 0.0f,  0.0f,  1.0f),
-	//2 is the (y,z) plane at x=7
-	Vector3f( 1.0f,  0.0f,  0.0f),
-	//3 is the (x,y) plane at z=0
-	Vector3f( 0.0f,  0.0f, -1.0f),
-	//4 is the (y,z) plane at x=0
-	Vector3f(-1.0f,  0.0f,  0.0f),
-	//5 is the (x,z) plane at y=0
-	Vector3f( 0.0f, -1.0f,  0.0f)
-};
-/*
-Vector3f normals[PANELS] = {
-	Vector3f( 0.0f,  1.0f,  0.0f),
-	Vector3f( 1.0f,  0.0f,  0.0f),
-	Vector3f( 0.0f,  0.0f,  1.0f),
-	Vector3f(-1.0f,  0.0f,  0.0f),
-	Vector3f( 0.0f,  0.0f, -1.0f),
-	Vector3f( 0.0f, -1.0f,  0.0f)
-};
-*/
 
 CRGB leds[NUM_LEDS];
 
@@ -154,37 +132,6 @@ P(7,6), P(7,7), P(6,7), P(6,6), P(5,6), P(4,6), P(3,6), P(2,6),
 };
 
 uint8_t gHue = 0;
-
-unsigned int bitOut(void)
-{
-	static unsigned long firstTime=1, prev=0;
-	unsigned long bit1=0, bit0=0, x=0, port=0, limit=99;
-	if (firstTime)
-	{
-		firstTime=0;
-		prev=analogRead(port);
-	}
-	while (limit--)
-	{
-		x=analogRead(port);
-		bit1=(prev!=x?1:0);
-		prev=x;
-		x=analogRead(port);
-		bit0=(prev!=x?1:0);
-		prev=x;
-		if (bit1!=bit0)
-			break;
-	}
-	return bit1;
-}
-uint64_t seedOut(uint8_t noOfBits)
-{
-	// return value with 'noOfBits' random bits set
-	uint64_t seed=0;
-	for (uint8_t i=0;i<noOfBits;++i)
-		seed = (seed<<1) | bitOut();
-	return seed;
-}
 
 void setup() {
 	random16_set_seed(seedOut(16));
@@ -526,25 +473,6 @@ void showCurrentPattern() {
 	FastLED.delay(WAIT-duration);
 }
 
-void setPixel3d(uint8_t x, uint8_t y, uint8_t z, const CRGB &c) {
-	if (x == 0) {
-		leds[PIXEL_IN_PANEL(4, P(FLIP(y), z))] = c;
-	} else if (x == LEDS_PER_ROW-1) { // panel 2
-		leds[PIXEL_IN_PANEL(2, P(FLIP(y), FLIP(z)))] = c;
-	}
-
-	if (y == 0) {
-		leds[PIXEL_IN_PANEL(5, P(FLIP(x), FLIP(z)))] = c;
-	} else if (y == LEDS_PER_ROW-1) {
-		leds[PIXEL_IN_PANEL(0, P(x, FLIP(z)))] = c;
-	}
-
-	if (z == 0) {
-		leds[PIXEL_IN_PANEL(3, P(FLIP(y), FLIP(x)))] = c;
-	} else if (z == LEDS_PER_ROW-1) {
-		leds[PIXEL_IN_PANEL(1, P(FLIP(y), x))] = c;
-	}
-}
 
 void sweepPlane() {
 	fadeToBlackBy(leds, NUM_LEDS, 50);
