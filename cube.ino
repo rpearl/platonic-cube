@@ -271,7 +271,6 @@ void rainbow() {
 		uint16_t offset_pos = pos + num_segs+2;
 
 		uint16_t seg;
-		uint8_t bright = 0;
 
 		uint16_t chosen_seg = -1;
 		for (seg = 0; seg < num_segs; seg++) {
