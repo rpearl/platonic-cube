@@ -710,6 +710,21 @@ void testPattern() {
     rain();
 }
 
+void fallingPlanes() {
+    fadeToBlackBy(leds, NUM_LEDS, 25);
+    Vector3f accelDir = accelerometerDirection();
+//TODO Falling with gravity.
+    int8_t y = -4 + scale16(beat16(30), LEDS_PER_ROW+4);
+
+    for (int8_t x = -4; x < LEDS_PER_ROW+4; x++) {
+        for (int8_t z = -4; z < LEDS_PER_ROW+4; z++) {
+            setPixel3dCompensated(accelDir, x, y, z, CHSV(gHue,255,255));
+        }
+    }
+
+}
+
+
 void testAccelerometer() {
     Vector3f accelDir = accelerometerDirection();
 
