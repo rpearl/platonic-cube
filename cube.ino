@@ -134,7 +134,139 @@ const PROGMEM int8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
 
 uint8_t gHue = 0;
 
+#define NUM_DROPLETS 80
+
+/// This class maintains the state and calculates the animations to render a falling water droplet
+/// Objects of this class can have three states:
+///    - inactive: this object does nothing
+///    - swelling: the droplet is at the top of the led strip and swells in intensity
+///    - falling: the droplet falls downwards and accelerates
+///    - bouncing: the droplet has bounced of the ground. A smaller, less intensive droplet bounces up
+///      while a part of the drop remains on the ground.
+/// After going through the swelling, falling and bouncing phases, the droplet automatically returns to the
+/// inactive state.
+class Droplet {
+    public:
+        Droplet()
+            : x(0), z(0), color(CRGB::Black), gravity(5),
+            position(0), speed(0), state(inactive)
+    {}
+
+        void init(int8_t x, int8_t z) {
+            this->x = x;
+            this->z = z;
+            reinit();
+        }
+
+        void reinit() {
+            this->position = 0;
+            this->speed = 0;
+            this->color = CHSV(144+random(32), 255, 255);
+            this->start = get_millisecond_timer()+1000*random8(5);
+            state = swelling;
+        }
+
+        /// perform one step and draw.
+        void step(CRGB *leds) {
+            if (get_millisecond_timer() >= start) {
+                step();
+                draw(leds);
+            }
+        }
+
+    private:
+        /// calculate the next step in the animation for this droplet
+        void step() {
+            if (state == falling || state == bouncing) {
+                position += speed;
+                speed += gravity;
+
+                // if we hit the bottom...
+                const uint16_t maxpos16 = (ROWS_PER_PANEL-1) << 8;
+                if (position > maxpos16) {
+                    if (state == bouncing) {
+                        // this is the second collision,
+                        // deactivate.
+                        state = inactive;
+                        reinit();
+                    } else {
+                        // reverse direction and dampen the speed
+                        position = maxpos16 - (position - maxpos16);
+                        speed = -speed/4;
+                        color.nscale8_video(collision_scaling);
+                        state = bouncing;
+                    }
+                }
+            } else if (state == swelling) {
+                ++position;
+                if (color.blue <= 10 || color.blue - position <= 10) {
+                    state = falling;
+                    position = 0;
+                }
+            }
+        }
+
+        /// Draw the droplet on the led string
+        /// This will "smear" the light of this droplet between two leds. The closer
+        /// the droplets position is to that of a particular led, the brighter that
+        /// led will be
+        void draw(CRGB *leds) {
+            Vector3f gravity = accelerometerDirection();
+            if (state == falling || state == bouncing) {
+                uint8_t position8 = position >> 8;
+                uint8_t remainder = position; // get the lower bits
+
+                CRGB tc = color;
+                int16_t lidx = getPixel3dCompensated(gravity, x,position8,z);
+                if (lidx >= 0)
+                    leds[lidx] += tc.nscale8_video(256 - remainder);
+
+                if (state == bouncing) {
+                    int16_t lidx = getPixel3dCompensated(gravity, x,ROWS_PER_PANEL-1,z);
+                    if (lidx >= 0)
+                        leds[lidx] = color;
+                }
+            } else if (state == swelling) {
+                CRGB tc = color;
+                int16_t lidx = getPixel3dCompensated(gravity,x,0,z);
+                if (lidx >= 0)
+                    leds[lidx] = tc.nscale8_video(position);
+            }
+        }
+
+        // how much of a color is left when colliding with the floor, value
+        // between 0 and 256 where 256 means no loss.
+        static const uint16_t collision_scaling = 40;
+        int8_t x, z;
+        CRGB color;
+        uint16_t gravity;
+        uint16_t position;
+        int16_t  speed;
+        enum stateval {
+            inactive,
+            swelling,
+            falling,
+            bouncing
+        };
+
+        stateval state;
+        unsigned long start;
+};
+
+Droplet droplets[NUM_DROPLETS];
+
 void setup() {
+    uint8_t idx = 0;
+    while (idx < NUM_DROPLETS) {
+        for (int8_t x = -1; x < LEDS_PER_ROW+1 && idx < NUM_DROPLETS; x+=2) {
+            for (int8_t z = -1; z < LEDS_PER_ROW+1 && idx < NUM_DROPLETS; z+=2) {
+                if (abs(x) <= 1 || abs(x-LEDS_PER_ROW) <= 1 || abs(z) <= 1 || abs(z-LEDS_PER_ROW) <= 1) {
+                    droplets[idx].init(x,z);
+                    idx++;
+                }
+            }
+        }
+    }
     initAccelerometer();
     random16_set_seed(seedOut(16));
     nextCue();
@@ -563,6 +695,14 @@ void setPanel(uint8_t panel, const CRGB &c) {
             setPixel3d(x,y,z,c);
             leds[PIXEL_IN_PANEL(panel, P(i,j))] = CRGB::Black;
         }
+    }
+}
+
+
+void rain() {
+    fill_solid(leds, NUM_LEDS, CRGB::Black);
+    for (uint8_t idx = 0; idx < NUM_DROPLETS; ++idx) {
+        droplets[idx].step(leds);
     }
 }
 
