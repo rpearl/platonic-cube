@@ -707,6 +707,10 @@ void rain() {
 }
 
 void testPattern() {
+    rain();
+}
+
+void testAccelerometer() {
     Vector3f accelDir = accelerometerDirection();
 
     for (int i = 0; i < NUM_LEDS; i++) {
