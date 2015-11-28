@@ -3,7 +3,7 @@
 #include <tuple>
 #include <FastLED.h>
 #include "cube.h"
-#include "Vector.h"
+#include "vector.h"
 #include "cube_util.h"
 #include "accel.h"
 
@@ -135,6 +135,7 @@ const PROGMEM int8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
 uint8_t gHue = 0;
 
 void setup() {
+    initAccelerometer();
     random16_set_seed(seedOut(16));
     nextCue();
     FastLED.addLeds<WS2811_PORTD, PANELS>(leds, LEDS_PER_PANEL);
@@ -579,18 +580,17 @@ void testPattern() {
     }
 }
 
+
 void loop() {
-    showCurrentPattern();
 
     EVERY_N_MILLISECONDS(20) {
         gHue++;
-    }
-
-    EVERY_N_MILLISECONDS(5) {
         sampleAccelerometer();
     }
 
     EVERY_N_SECONDS(SECONDS_PER_CUE) {
         nextCue();
     }
+
+    showCurrentPattern();
 }

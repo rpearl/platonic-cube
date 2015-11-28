@@ -39,6 +39,5 @@
 extern CRGB leds[NUM_LEDS];
 extern uint8_t gHue;
 
-void setPixel3d(uint8_t x, uint8_t y, uint8_t z, const CRGB &c);
 void init_liquid();
 #endif

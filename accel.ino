@@ -1,6 +1,7 @@
 /* vim: set ts=8 sts=4 et sw=4 tw=99: */
 #define NUM_READINGS 10
 #include "accel.h"
+#include "quaternion.h"
 
 struct AccelAxis {
     int readings[NUM_READINGS];
@@ -17,6 +18,7 @@ struct AccelAxis {
     {
         for (size_t i = 0; i < NUM_READINGS; i++) {
             readSample();
+            delay(5);
         }
     }
 
@@ -41,6 +43,13 @@ struct AccelAxis {
 static AccelAxis xAxis(A3, 419, 619);
 static AccelAxis yAxis(A2, 403, 612);
 static AccelAxis zAxis(A1, 405, 609);
+static Quaternion correction;
+
+void initAccelerometer() {
+    Vector3f initialDirection = uncorrectedDirection();
+    correction = getRotationFromTo(initialDirection, -Vector3f::UnitY);
+}
+
 
 void sampleAccelerometer() {
     xAxis.readSample();
@@ -48,10 +57,16 @@ void sampleAccelerometer() {
     zAxis.readSample();
 }
 
-Vector3f accelerometerDirection() {
-    return normalize(Vector3f(
+static Vector3f uncorrectedDirection() {
+    return (Vector3f(
                 xAxis.getScaledValue(),
                 yAxis.getScaledValue(),
                 zAxis.getScaledValue()
                 ));
+}
+
+Vector3f accelerometerDirection() {
+    Vector3f dir = uncorrectedDirection();
+
+    return normalize(correction*dir);
 }

@@ -7,6 +7,9 @@
 
 struct Vector3f
 {
+    static const Vector3f UnitX;
+    static const Vector3f UnitY;
+    static const Vector3f UnitZ;
     float	x, y, z;
 
     inline Vector3f()
@@ -101,99 +104,24 @@ struct Vector3f
         z /= v.z;
     }
 };
-
-
-inline Vector3f operator +(const Vector3f &v, float s)
-{
-    return (Vector3f(v.x + s, v.y + s, v.z + s));
-}
-
-inline Vector3f operator +(float s, const Vector3f &v)
-{
-    return (Vector3f(s + v.x, s + v.y, s + v.z));
-}
-
-inline Vector3f operator +(const Vector3f &u, const Vector3f &v)
-{
-    return (Vector3f(u.x + v.x, u.y + v.y, u.z + v.z));
-}
-
-inline Vector3f operator -(const Vector3f &v, float s)
-{
-    return (Vector3f(v.x - s, v.y - s, v.z - s));
-}
-
-inline Vector3f operator -(float s, const Vector3f &v)
-{
-    return (Vector3f(s - v.x, s - v.y, s - v.z));
-}
-
-inline Vector3f operator -(const Vector3f &u, const Vector3f &v)
-{
-    return (Vector3f(u.x - v.x, u.y - v.y, u.z - v.z));
-}
-
-inline Vector3f operator *(const Vector3f &v, float s)
-{
-    return (Vector3f(v.x * s, v.y * s, v.z * s));
-}
-
-inline Vector3f operator *(float s, const Vector3f &v)
-{
-    return (Vector3f(s * v.x, s * v.y, s * v.z));
-}
-
-inline Vector3f operator *(const Vector3f &u, const Vector3f &v)
-{
-    return (Vector3f(u.x * v.x, u.y * v.y, u.z * v.z));
-}
-
-inline Vector3f operator /(const Vector3f &v, float s)
-{
-    float	inv = 1.0f / s;
-
-    return (Vector3f(v.x * inv, v.y * inv, v.z * inv));
-}
-
-inline Vector3f operator /(float s, const Vector3f &v)
-{
-    return (Vector3f(s / v.x, s / v.y, s / v.z));
-}
-
-inline Vector3f operator /(const Vector3f &u, const Vector3f &v)
-{
-    return (Vector3f(u.x / v.x, u.y / v.y, u.z / v.z));
-}
-
-inline Vector3f operator -(const Vector3f &v)
-{
-    return (Vector3f(-v.x, -v.y, -v.z));
-}
-
-inline float dot(const Vector3f &u, const Vector3f &v)
-{
-    return (u.x * v.x + u.y * v.y + u.z * v.z);
-}
-
-inline Vector3f cross(const Vector3f &u, const Vector3f &v)
-{
-    return (Vector3f(u.y * v.z - v.y * u.z,
-                u.z * v.x - u.x * v.z,
-                u.x * v.y - u.y * v.x));
-}
-
-inline float length(const Vector3f &v)
-{
-    return ((float)sqrt(v.x * v.x + v.y * v.y + v.z * v.z));
-}
-
-inline Vector3f normalize(const Vector3f &v)
-{
-    return (v / length(v));
-}
-
+Vector3f cross(const Vector3f &u, const Vector3f &v);
+Vector3f normalize(const Vector3f &v);
+Vector3f operator *(const Vector3f &u, const Vector3f &v);
+Vector3f operator *(const Vector3f &v, float s);
+Vector3f operator *(float s, const Vector3f &v);
+Vector3f operator +(const Vector3f &u, const Vector3f &v);
+Vector3f operator +(const Vector3f &v, float s);
+Vector3f operator +(float s, const Vector3f &v);
+Vector3f operator -(const Vector3f &u, const Vector3f &v);
+Vector3f operator -(const Vector3f &v);
+Vector3f operator -(const Vector3f &v, float s);
+Vector3f operator -(float s, const Vector3f &v);
+Vector3f operator /(const Vector3f &u, const Vector3f &v);
+Vector3f operator /(const Vector3f &v, float s);
+Vector3f operator /(float s, const Vector3f &v);
+bool isZeroLength(const Vector3f &v);
+float dot(const Vector3f &u, const Vector3f &v);
+float length(const Vector3f &v);
 
 
 #endif /* _VECTOR3F_H_ */
-
-

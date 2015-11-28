@@ -3,6 +3,8 @@
 #include <FastLED.h>
 #include "cube.h"
 
+#include "quaternion.h"
+
 Vector3f normals[PANELS] = {
     //0 is the (x,z) plane at y=7
     Vector3f( 0.0f,  1.0f,  0.0f),
@@ -52,28 +54,15 @@ uint64_t seedOut(uint8_t noOfBits)
     return seed;
 }
 
-void setPixel3d(uint8_t x, uint8_t y, uint8_t z, const CRGB &c) {
-    if (x == 0) {
-        leds[PIXEL_IN_PANEL(4, P(FLIP(y), z))] = c;
-    } else if (x == LEDS_PER_ROW-1) { // panel 2
-        leds[PIXEL_IN_PANEL(2, P(FLIP(y), FLIP(z)))] = c;
-    }
-
-    if (y == 0) {
-        leds[PIXEL_IN_PANEL(5, P(FLIP(x), FLIP(z)))] = c;
-    } else if (y == LEDS_PER_ROW-1) {
-        leds[PIXEL_IN_PANEL(0, P(x, FLIP(z)))] = c;
-    }
-
-    if (z == 0) {
-        leds[PIXEL_IN_PANEL(3, P(FLIP(y), FLIP(x)))] = c;
-    } else if (z == LEDS_PER_ROW-1) {
-        leds[PIXEL_IN_PANEL(1, P(FLIP(y), x))] = c;
-    }
+void setPixel3d(int8_t x, int8_t y, int8_t z, const CRGB &c) {
+    int16_t idx = getPixel3d(x,y,z);
+    if (idx < 0)
+        return;
+    leds[idx] = c;
 }
 
-std::tuple<uint8_t, uint8_t, uint8_t> get3dCoord(uint8_t panel, uint8_t i, uint8_t j) {
-    uint8_t x, y, z;
+coord_t get3dCoord(int8_t panel, int8_t i, int8_t j) {
+    int8_t x, y, z;
     switch (panel) {
         case 0:
             y = LEDS_PER_ROW-1;
@@ -107,4 +96,55 @@ std::tuple<uint8_t, uint8_t, uint8_t> get3dCoord(uint8_t panel, uint8_t i, uint8
             break;
     }
     return std::make_tuple(x,y,z);
+}
+
+coord_t getCorrectedCoord(const Vector3f &gravity, int8_t x, int8_t y, int8_t z) {
+    Quaternion q = getRotationFromTo(Vector3f::UnitY, -gravity);
+
+    Vector3f v(x-4,y-4,z-4);
+
+    Vector3f ret = q*v;
+
+    return std::make_tuple(ret.x+4, ret.y+4, ret.z+4);
+}
+
+int16_t getPixel3d(int8_t x, int8_t y, int8_t z) {
+    if (x >= LEDS_PER_ROW || y >= LEDS_PER_ROW || z >= LEDS_PER_ROW)
+        return -1;
+
+    if (x < 0 || y < 0 || z < 0)
+        return -1;
+
+
+    if (x == 0) {
+        return PIXEL_IN_PANEL(4, P(FLIP(y), z));
+    } else if (x == LEDS_PER_ROW-1) { // panel 2
+        return PIXEL_IN_PANEL(2, P(FLIP(y), FLIP(z)));
+    }
+
+    if (y == 0) {
+        return PIXEL_IN_PANEL(5, P(FLIP(x), FLIP(z)));
+    } else if (y == LEDS_PER_ROW-1) {
+        return PIXEL_IN_PANEL(0, P(x, FLIP(z)));
+    }
+
+    if (z == 0) {
+        return PIXEL_IN_PANEL(3, P(FLIP(y), FLIP(x)));
+    } else if (z == LEDS_PER_ROW-1) {
+        return PIXEL_IN_PANEL(1, P(FLIP(y), x));
+    }
+
+    return -1;
+}
+
+int16_t getPixel3dCompensated(const Vector3f &gravity, int8_t x, int8_t y, int8_t z) {
+    int8_t xc, yc, zc;
+    std::tie(xc,yc,zc) = getCorrectedCoord(gravity, x,y,z);
+    return getPixel3d(xc,yc,zc);
+}
+
+void setPixel3dCompensated(const Vector3f &gravity, int8_t x, int8_t y, int8_t z, const CRGB &c) {
+    int8_t xc, yc, zc;
+    std::tie(xc,yc,zc) = getCorrectedCoord(gravity, x,y,z);
+    setPixel3d(xc,yc,zc,c);
 }
