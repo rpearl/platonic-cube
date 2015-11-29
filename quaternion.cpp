@@ -152,10 +152,3 @@ Quaternion getRotationFromTo(const Vector3f &source, const Vector3f &dest) {
         return normalize(q);
     }
 }
-
-std::ostream& operator <<( std::ostream& o, const Quaternion& q )
-{
-    o << "Quaternion(" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")";
-    return o;
-}
-

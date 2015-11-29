@@ -1,9 +1,8 @@
 /* vim: set ts=8 sts=4 et sw=4 tw=99: */
 #define USE_GET_MILLISECOND_TIMER
-#include <tuple>
 #include <FastLED.h>
 #include "cube.h"
-#include "vector.h"
+#include "vector3.h"
 #include "cube_util.h"
 #include "accel.h"
 
@@ -11,6 +10,13 @@ extern "C" {
     int _getpid(){ return -1;}
     int _kill(int pid, int sig){ return -1; }
     int _write_r() { return -1; }
+    void __cxa_pure_virtual() { abort(); }
+}
+
+namespace __gnu_cxx {
+    void __verbose_terminate_handler() {
+        abort();
+    }
 }
 
 uint32_t get_millisecond_timer() {
@@ -25,10 +31,10 @@ typedef void (*SimplePattern)();
 #define SINGLE_PATTERN_DEBUG
 
 //TODO: generalize pattern list
-SimplePatternList gTransitions = {rainbowSegments, pulse, fillSolid};
+const SimplePatternList gTransitions = {rainbowSegments, pulse, fillSolid};
 
-SimplePatternList gPatterns = {
-    testPattern,
+const SimplePatternList gPatterns = {
+    //testPattern,
     makeWaves,
     chaseThroughPanels,
     rainbow,
@@ -49,9 +55,9 @@ SimplePatternList gPatterns = {
 
 #define P(x,y) (x)*LEDS_PER_ROW + y
 
-uint8_t gCurrentCue = 0;
+static uint8_t gCurrentCue = 0;
 
-uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
+static uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
 
 // Hacky gross code for effects that understand the physical object
 
@@ -60,7 +66,7 @@ uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
 // index 1..NUM_SEGMENTS (inclusive): start index for each segment
 // Remaining indices: pixel in panel
 
-const PROGMEM int8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
+static const PROGMEM int8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
     { // side 11
         8, 10, 18, 37, 50, 59, 68, 70, 72, 74,
         P(2,2), P(2,1), P(2,0), P(3,0), P(4,0), P(5,0), P(6,0), P(7,0),
@@ -135,7 +141,7 @@ const PROGMEM int8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
 uint8_t gHue = 0;
 
 #define NUM_DROPLETS 80
-
+/*
 /// This class maintains the state and calculates the animations to render a falling water droplet
 /// Objects of this class can have three states:
 ///    - inactive: this object does nothing
@@ -217,20 +223,20 @@ class Droplet {
                 uint8_t remainder = position; // get the lower bits
 
                 CRGB tc = color;
-                int16_t lidx = getPixel3dCompensated(gravity, x,position8,z);
-                if (lidx >= 0)
+                for (auto lidx : getPixel3dCompensated(gravity, x, position8,z)) {
                     leds[lidx] += tc.nscale8_video(256 - remainder);
+                }
 
                 if (state == bouncing) {
-                    int16_t lidx = getPixel3dCompensated(gravity, x,ROWS_PER_PANEL-1,z);
-                    if (lidx >= 0)
+                    for (auto lidx : getPixel3dCompensated(gravity, x,ROWS_PER_PANEL-1,z)) {
                         leds[lidx] = color;
+                    }
                 }
             } else if (state == swelling) {
                 CRGB tc = color;
-                int16_t lidx = getPixel3dCompensated(gravity,x,0,z);
-                if (lidx >= 0)
+                for (auto lidx : getPixel3dCompensated(gravity,x,0,z)) {
                     leds[lidx] = tc.nscale8_video(position);
+                }
             }
         }
 
@@ -254,8 +260,9 @@ class Droplet {
 };
 
 Droplet droplets[NUM_DROPLETS];
-
+*/
 void setup() {
+    /*
     uint8_t idx = 0;
     while (idx < NUM_DROPLETS) {
         for (int8_t x = -1; x < LEDS_PER_ROW+1 && idx < NUM_DROPLETS; x+=2) {
@@ -267,6 +274,7 @@ void setup() {
             }
         }
     }
+    */
     initAccelerometer();
     random16_set_seed(seedOut(16));
     nextCue();
@@ -687,28 +695,16 @@ void makeWave(uint8_t z, uint8_t hue) {
     }
 }
 
-void setPanel(uint8_t panel, const CRGB &c) {
-    for (uint8_t i = 0; i < LEDS_PER_ROW; i++) {
-        for (uint8_t j = 0; j < LEDS_PER_ROW; j++) {
-            uint8_t x,y,z;
-            std::tie(x,y,z) = get3dCoord(panel, i, j);
-            setPixel3d(x,y,z,c);
-            leds[PIXEL_IN_PANEL(panel, P(i,j))] = CRGB::Black;
-        }
-    }
-}
-
-
-void rain() {
-    fill_solid(leds, NUM_LEDS, CRGB::Black);
-    for (uint8_t idx = 0; idx < NUM_DROPLETS; ++idx) {
-        droplets[idx].step(leds);
-    }
-}
-
-void testPattern() {
-    rain();
-}
+//void rain() {
+//    fill_solid(leds, NUM_LEDS, CRGB::Black);
+//    for (uint8_t idx = 0; idx < NUM_DROPLETS; ++idx) {
+//        droplets[idx].step(leds);
+//    }
+//}
+//
+//void testPattern() {
+//    rain();
+//}
 
 void fallingPlanes() {
     fadeToBlackBy(leds, NUM_LEDS, 25);
@@ -723,22 +719,6 @@ void fallingPlanes() {
     }
 
 }
-
-
-void testAccelerometer() {
-    Vector3f accelDir = accelerometerDirection();
-
-    for (int i = 0; i < NUM_LEDS; i++) {
-        leds[i] = CRGB::Black;
-    }
-
-    for (uint8_t panel = 0; panel < PANELS; panel++) {
-        if (dot(normals[panel], accelDir) > 0.55) {
-            setPanel(panel, CRGB::Blue);
-        }
-    }
-}
-
 
 void loop() {
 

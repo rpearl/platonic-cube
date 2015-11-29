@@ -10,7 +10,7 @@
 #ifndef _QUATERNION_HPP_
 #define _QUATERNION_HPP_
 
-#include "vector.h"
+#include "vector3.h"
 
 /*
    This code is loosely based on quaternion code from Ogre3d (www.ogre3d.org).
@@ -117,8 +117,6 @@ Quaternion normalize( const Quaternion& q );
 Quaternion conjugate( const Quaternion& q );
 
 Quaternion getRotationFromTo(const Vector3f &source, const Vector3f &dest);
-
-std::ostream& operator <<( std::ostream& o, const Quaternion& q );
 
 #endif /* _QUATERNION_HPP_ */
 
