@@ -705,16 +705,18 @@ class MakeWaves : public Pattern {
 //void testPattern() {
 //    rain();
 //}
-
-class FallingPlanes : public Pattern {
+//
+#define BUFFER 2
+template <int8_t Y, int16_t S>
+class PlanesWithGravity : public Pattern {
     private:
         uint16_t pos;
-        uint16_t speed;
-        const uint16_t gravity = 5;
+        int16_t speed;
+        const uint16_t gravity = 3;
     public:
         void setup() {
-            pos = 0;
-            speed = 0;
+            this->pos = (Y + BUFFER) << 8;
+            this->speed = S;
         }
         void show() override {
             fadeToBlackBy(leds, NUM_LEDS, 25);
@@ -725,19 +727,23 @@ class FallingPlanes : public Pattern {
             speed += gravity;
 
             int8_t y = pos >> 8;
-            y -= 4;
+            y -= BUFFER;
 
 
-            for (int8_t x = -4; x < LEDS_PER_ROW+4; x++) {
-                for (int8_t z = -4; z < LEDS_PER_ROW+4; z++) {
+            for (int8_t x = -BUFFER; x < LEDS_PER_ROW+BUFFER; x++) {
+                for (int8_t z = -BUFFER; z < LEDS_PER_ROW+BUFFER; z++) {
                     setPixel3dCompensated(accelDir, x, y, z, CHSV(gHue,255,255));
                 }
             }
-            if (y >= LEDS_PER_ROW + 4) {
+            if (y >= LEDS_PER_ROW + (BUFFER*2)) {
                 setup();
             }
         }
 };
+
+
+typedef PlanesWithGravity<-BUFFER, 0> FallingPlanes;
+typedef PlanesWithGravity<LEDS_PER_ROW + BUFFER-1, -130> LaunchingPlanes;
 
 class RGBCube : public Pattern {
     public:
@@ -766,7 +772,7 @@ static Pattern * const gTransitions[] = {
     new FillSolid()
 };
 static Pattern * const gPatterns[] = {
-    //new RGBCube(),
+    new LaunchingPlanes(),
     new FallingPlanes(),
     new Rain(),
     new MakeWaves(),
