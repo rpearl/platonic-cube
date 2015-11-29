@@ -812,7 +812,8 @@ void nextCue() {
     }
 
     if (oldPattern != currentPattern) {
-        oldPattern->teardown();
+        if (oldPattern)
+            oldPattern->teardown();
         currentPattern->setup();
     }
 #else
@@ -826,15 +827,22 @@ void nextCue() {
 }
 
 void showCurrentPattern() {
-    uint64_t start = get_millisecond_timer();
+    int64_t start = get_millisecond_timer();
     currentPattern->show();
     FastLED.show();
-    uint64_t end = get_millisecond_timer();
-    uint64_t duration = 0;
+    int64_t end = get_millisecond_timer();
+    int64_t duration = 0;
     if (end > start) {
         duration = end - start;
     }
-    FastLED.delay(WAIT-duration);
+    int64_t wait = WAIT-duration;
+    if (wait < 0) {
+        wait = 0;
+    }
+    if (wait > WAIT) {
+        wait = wait;
+    }
+    FastLED.delay(wait);
 }
 
 void loop() {
