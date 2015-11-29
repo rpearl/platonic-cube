@@ -745,22 +745,25 @@ class PlanesWithGravity : public Pattern {
 typedef PlanesWithGravity<-BUFFER, 0> FallingPlanes;
 typedef PlanesWithGravity<LEDS_PER_ROW + BUFFER-1, -130> LaunchingPlanes;
 
-class RGBCube : public Pattern {
+// pattern ideas:
+// rainbowify segments with bright crawlers
+//
+// rainbow from top to bottom gravity-compensated
+//
+//
+class RainbowGravity : public Pattern {
     public:
         void show() override {
-            for (uint8_t x = -4; x < LEDS_PER_ROW+4; x++) {
-                for (uint8_t y = -4; y < LEDS_PER_ROW+4; y++) {
-                    for (uint8_t z = -4; z < LEDS_PER_ROW+4; z++) {
-                        uint8_t r = (x+4)*(256/16);
-                        uint8_t g = (y+4)*(256/16);
-                        uint8_t b = (z+4)*(256/16);
-
-                        setPixel3dCompensated(accelerometerDirection(),
-                                x,y,z,
-                                CRGB(r,g,b)
-                        );
+            fill_solid(leds, NUM_LEDS, CRGB::Black);
+            uint8_t hue = gHue;
+            Vector3f accelDir = accelerometerDirection();
+            for (int8_t y = -3; y < LEDS_PER_ROW+3; y++) {
+                for (int8_t x = -3; x < LEDS_PER_ROW+3; x++) {
+                    for (int8_t z = -3; z < LEDS_PER_ROW+3; z++) {
+                        setPixel3dCompensated(accelDir, x, y, z, CHSV(hue,255,255));
                     }
                 }
+                hue+=15;
             }
         }
 };
@@ -772,6 +775,7 @@ static Pattern * const gTransitions[] = {
     new FillSolid()
 };
 static Pattern * const gPatterns[] = {
+    new RainbowGravity(),
     new LaunchingPlanes(),
     new FallingPlanes(),
     new Rain(),
