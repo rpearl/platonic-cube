@@ -5,6 +5,7 @@
 #include "vector3.h"
 #include "cube_util.h"
 #include "accel.h"
+#include "pattern.h"
 
 extern "C" {
     int _getpid(){ return -1;}
@@ -25,39 +26,8 @@ uint32_t get_millisecond_timer() {
 
 CRGB leds[NUM_LEDS];
 
-typedef void (*SimplePatternList[])();
-typedef void (*SimplePattern)();
-
 #define SINGLE_PATTERN_DEBUG
 
-//TODO: generalize pattern list
-const SimplePatternList gTransitions = {rainbowSegments, pulse, fillSolid};
-
-const SimplePatternList gPatterns = {
-    //testPattern,
-    makeWaves,
-    chaseThroughPanels,
-    rainbow,
-    pulseSegments,
-    crawlWithHighlight,
-    chaseRainbow,
-    flickerSegments,
-    chaseSolid,
-    sweepTwoSolid,
-    sweepTwoRainbow,
-};
-
-#define NUM_CUES 7
-#define SECONDS_PER_CUE 30
-
-#define TRANSITION_CHANGE_CUE 0
-#define PATTERN_CHANGE_CUE 1
-
-#define P(x,y) (x)*LEDS_PER_ROW + y
-
-static uint8_t gCurrentCue = 0;
-
-static uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
 
 // Hacky gross code for effects that understand the physical object
 
@@ -66,6 +36,7 @@ static uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is cu
 // index 1..NUM_SEGMENTS (inclusive): start index for each segment
 // Remaining indices: pixel in panel
 
+#define P(x,y) (x)*LEDS_PER_ROW + y
 static const PROGMEM int8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
     { // side 11
         8, 10, 18, 37, 50, 59, 68, 70, 72, 74,
@@ -140,141 +111,157 @@ static const PROGMEM int8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
 
 uint8_t gHue = 0;
 
-#define NUM_DROPLETS 80
-/*
-/// This class maintains the state and calculates the animations to render a falling water droplet
-/// Objects of this class can have three states:
-///    - inactive: this object does nothing
-///    - swelling: the droplet is at the top of the led strip and swells in intensity
-///    - falling: the droplet falls downwards and accelerates
-///    - bouncing: the droplet has bounced of the ground. A smaller, less intensive droplet bounces up
-///      while a part of the drop remains on the ground.
-/// After going through the swelling, falling and bouncing phases, the droplet automatically returns to the
-/// inactive state.
-class Droplet {
-    public:
-        Droplet()
-            : x(0), z(0), color(CRGB::Black), gravity(5),
-            position(0), speed(0), state(inactive)
-    {}
-
-        void init(int8_t x, int8_t z) {
-            this->x = x;
-            this->z = z;
-            reinit();
-        }
-
-        void reinit() {
-            this->position = 0;
-            this->speed = 0;
-            this->color = CHSV(144+random(32), 255, 255);
-            this->start = get_millisecond_timer()+1000*random8(5);
-            state = swelling;
-        }
-
-        /// perform one step and draw.
-        void step(CRGB *leds) {
-            if (get_millisecond_timer() >= start) {
-                step();
-                draw(leds);
-            }
-        }
-
+class Rain : public Pattern {
     private:
-        /// calculate the next step in the animation for this droplet
-        void step() {
-            if (state == falling || state == bouncing) {
-                position += speed;
-                speed += gravity;
+        static const int NUM_DROPLETS = 80;
+        /// This class maintains the state and calculates the animations to render a falling water droplet
+        /// Objects of this class can have three states:
+        ///    - inactive: this object does nothing
+        ///    - swelling: the droplet is at the top of the led strip and swells in intensity
+        ///    - falling: the droplet falls downwards and accelerates
+        ///    - bouncing: the droplet has bounced of the ground. A smaller, less intensive droplet bounces up
+        ///      while a part of the drop remains on the ground.
+        /// After going through the swelling, falling and bouncing phases, the droplet automatically returns to the
+        /// inactive state.
+        class Droplet {
+            public:
+                Droplet()
+                    : x(0), z(0), color(CRGB::Black), gravity(5),
+                    position(0), speed(0), state(inactive)
+            {}
 
-                // if we hit the bottom...
-                const uint16_t maxpos16 = (ROWS_PER_PANEL-1) << 8;
-                if (position > maxpos16) {
-                    if (state == bouncing) {
-                        // this is the second collision,
-                        // deactivate.
-                        state = inactive;
-                        reinit();
-                    } else {
-                        // reverse direction and dampen the speed
-                        position = maxpos16 - (position - maxpos16);
-                        speed = -speed/4;
-                        color.nscale8_video(collision_scaling);
-                        state = bouncing;
+                void init(int8_t x, int8_t z) {
+                    this->x = x;
+                    this->z = z;
+                    reinit();
+                }
+
+                void reinit() {
+                    this->position = 0;
+                    this->speed = 0;
+                    this->color = CHSV(144+random(32), 255, 255);
+                    this->start = get_millisecond_timer()+1000*random8(5);
+                    state = swelling;
+                }
+
+                /// perform one step and draw.
+                void step(CRGB *leds) {
+                    if (get_millisecond_timer() >= start) {
+                        step();
+                        draw(leds);
                     }
                 }
-            } else if (state == swelling) {
-                ++position;
-                if (color.blue <= 10 || color.blue - position <= 10) {
-                    state = falling;
-                    position = 0;
-                }
-            }
-        }
 
-        /// Draw the droplet on the led string
-        /// This will "smear" the light of this droplet between two leds. The closer
-        /// the droplets position is to that of a particular led, the brighter that
-        /// led will be
-        void draw(CRGB *leds) {
-            Vector3f gravity = accelerometerDirection();
-            if (state == falling || state == bouncing) {
-                uint8_t position8 = position >> 8;
-                uint8_t remainder = position; // get the lower bits
+            private:
+                /// calculate the next step in the animation for this droplet
+                void step() {
+                    if (state == falling || state == bouncing) {
+                        position += speed;
+                        speed += gravity;
 
-                CRGB tc = color;
-                for (auto lidx : getPixel3dCompensated(gravity, x, position8,z)) {
-                    leds[lidx] += tc.nscale8_video(256 - remainder);
-                }
-
-                if (state == bouncing) {
-                    for (auto lidx : getPixel3dCompensated(gravity, x,ROWS_PER_PANEL-1,z)) {
-                        leds[lidx] = color;
+                        // if we hit the bottom...
+                        const uint16_t maxpos16 = (ROWS_PER_PANEL-1) << 8;
+                        if (position > maxpos16) {
+                            if (state == bouncing) {
+                                // this is the second collision,
+                                // deactivate.
+                                state = inactive;
+                                reinit();
+                            } else {
+                                // reverse direction and dampen the speed
+                                position = maxpos16 - (position - maxpos16);
+                                speed = -speed/4;
+                                color.nscale8_video(collision_scaling);
+                                state = bouncing;
+                            }
+                        }
+                    } else if (state == swelling) {
+                        ++position;
+                        if (color.blue <= 10 || color.blue - position <= 10) {
+                            state = falling;
+                            position = 0;
+                        }
                     }
                 }
-            } else if (state == swelling) {
-                CRGB tc = color;
-                for (auto lidx : getPixel3dCompensated(gravity,x,0,z)) {
-                    leds[lidx] = tc.nscale8_video(position);
-                }
-            }
-        }
 
-        // how much of a color is left when colliding with the floor, value
-        // between 0 and 256 where 256 means no loss.
-        static const uint16_t collision_scaling = 40;
-        int8_t x, z;
-        CRGB color;
-        uint16_t gravity;
-        uint16_t position;
-        int16_t  speed;
-        enum stateval {
-            inactive,
-            swelling,
-            falling,
-            bouncing
+                /// Draw the droplet on the led string
+                /// This will "smear" the light of this droplet between two leds. The closer
+                /// the droplets position is to that of a particular led, the brighter that
+                /// led will be
+                void draw(CRGB *leds) {
+                    Vector3f gravity = accelerometerDirection();
+                    if (state == falling || state == bouncing) {
+                        uint8_t position8 = position >> 8;
+                        uint8_t remainder = position; // get the lower bits
+
+                        CRGB tc = color;
+                        for (auto lidx : getPixel3dCompensated(gravity, x, position8,z)) {
+                            leds[lidx] += tc.nscale8_video(256 - remainder);
+                        }
+
+                        if (state == bouncing) {
+                            for (auto lidx : getPixel3dCompensated(gravity, x,ROWS_PER_PANEL-1,z)) {
+                                leds[lidx] = color;
+                            }
+                        }
+                    } else if (state == swelling) {
+                        CRGB tc = color;
+                        for (auto lidx : getPixel3dCompensated(gravity,x,0,z)) {
+                            leds[lidx] = tc.nscale8_video(position);
+                        }
+                    }
+                }
+
+                // how much of a color is left when colliding with the floor, value
+                // between 0 and 256 where 256 means no loss.
+                static const uint16_t collision_scaling = 40;
+                int8_t x, z;
+                CRGB color;
+                uint16_t gravity;
+                uint16_t position;
+                int16_t  speed;
+                enum stateval {
+                    inactive,
+                    swelling,
+                    falling,
+                    bouncing
+                };
+
+                stateval state;
+                unsigned long start;
         };
+        Droplet *droplets;
+    public:
+        void setup() {
+            droplets = new Droplet[NUM_DROPLETS];
+            uint8_t idx = 0;
+            while (true) {
+                for (int8_t x = -1; x < LEDS_PER_ROW+1; x+=2) {
+                    for (int8_t z = -1; z < LEDS_PER_ROW+1; z+=2) {
+                        if (abs(x) <= 1 || abs(x-LEDS_PER_ROW) <= 1 ||
+                            abs(z) <= 1 || abs(z-LEDS_PER_ROW) <= 1) {
+                            droplets[idx++].init(x,z);
 
-        stateval state;
-        unsigned long start;
-};
-
-Droplet droplets[NUM_DROPLETS];
-*/
-void setup() {
-    /*
-    uint8_t idx = 0;
-    while (idx < NUM_DROPLETS) {
-        for (int8_t x = -1; x < LEDS_PER_ROW+1 && idx < NUM_DROPLETS; x+=2) {
-            for (int8_t z = -1; z < LEDS_PER_ROW+1 && idx < NUM_DROPLETS; z+=2) {
-                if (abs(x) <= 1 || abs(x-LEDS_PER_ROW) <= 1 || abs(z) <= 1 || abs(z-LEDS_PER_ROW) <= 1) {
-                    droplets[idx].init(x,z);
-                    idx++;
+                            if (idx == NUM_DROPLETS)
+                                return;
+                        }
+                    }
                 }
             }
         }
-    }
-    */
+
+        void show() override {
+            fill_solid(leds, NUM_LEDS, CRGB::Black);
+            for (uint8_t idx = 0; idx < NUM_DROPLETS; ++idx) {
+                droplets[idx].step(leds);
+            }
+        }
+
+        void teardown() {
+            delete[] droplets;
+        }
+};
+void setup() {
     initAccelerometer();
     random16_set_seed(seedOut(16));
     nextCue();
@@ -284,180 +271,196 @@ void setup() {
     FastLED.setBrightness(40);
 }
 
-enum { GETTING_DARKER = 0, GETTING_BRIGHTER = 1 };
-uint8_t pulseSegmentDirections[(NUM_LEDS+7)/8];
-bool getPixelDirection(uint16_t i) {
-    uint16_t index = i / 8;
-    uint8_t  bitNum = i & 0x07;
-    // using Arduino 'bitRead' function; expanded code below
-    return bitRead(pulseSegmentDirections[index], bitNum);
-}
-void setPixelDirection(uint16_t i, bool dir) {
-    uint16_t index = i / 8;
-    uint8_t  bitNum = i & 0x07;
-    // using Arduino 'bitWrite' function; expanded code below
-    bitWrite( pulseSegmentDirections[index], bitNum, dir);
-}
-
-
-CRGB makeBrighter( const CRGB& color, fract8 howMuchBrighter) {
-    CRGB incrementalColor = color;
-    incrementalColor.nscale8( howMuchBrighter);
-    return color + incrementalColor;
-}
-
-CRGB makeDarker( const CRGB& color, fract8 howMuchDarker) {
-    CRGB newcolor = color;
-    newcolor.nscale8( 255 - howMuchDarker);
-    return newcolor;
-}
-
-void brightenOrDarkenEachPixel( fract8 fadeUpAmount, fract8 fadeDownAmount) {
-    for( uint16_t i = 0; i < NUM_LEDS; i++) {
-        if( getPixelDirection(i) == GETTING_DARKER) {
-            // This pixel is getting darker
-            leds[i] = makeDarker( leds[i], fadeDownAmount);
-        } else {
-            // This pixel is getting brighter
-            leds[i] = makeBrighter( leds[i], fadeUpAmount);
-            // now check to see if we've maxxed out the brightness
-            if( leds[i].r == 255 || leds[i].g == 255 || leds[i].b == 255) {
-                // if so, turn around and start getting darker
-                setPixelDirection(i, GETTING_DARKER);
-            }
+class PulseSegments : public Pattern {
+    private:
+        enum { GETTING_DARKER = 0, GETTING_BRIGHTER = 1 };
+        uint8_t pulseSegmentDirections[(NUM_LEDS+7)/8];
+        bool getPixelDirection(uint16_t i) {
+            uint16_t index = i / 8;
+            uint8_t  bitNum = i & 0x07;
+            // using Arduino 'bitRead' function; expanded code below
+            return bitRead(pulseSegmentDirections[index], bitNum);
         }
-    }
-}
-#define STARTING_BRIGHTNESS 64
-#define FADE_IN_SPEED       28
-#define FADE_OUT_SPEED      16
+        void setPixelDirection(uint16_t i, bool dir) {
+            uint16_t index = i / 8;
+            uint8_t  bitNum = i & 0x07;
+            // using Arduino 'bitWrite' function; expanded code below
+            bitWrite( pulseSegmentDirections[index], bitNum, dir);
+        }
 
-#define DENSITY 12 
 
-void pulseSegments() {
-    brightenOrDarkenEachPixel(FADE_IN_SPEED, FADE_OUT_SPEED);
+        CRGB makeBrighter( const CRGB& color, fract8 howMuchBrighter) {
+            CRGB incrementalColor = color;
+            incrementalColor.nscale8( howMuchBrighter);
+            return color + incrementalColor;
+        }
 
-    for (uint8_t panel = 0; panel < PANELS; panel++) {
-        uint8_t num_segs = NUM_SEGS(panel);
+        CRGB makeDarker( const CRGB& color, fract8 howMuchDarker) {
+            CRGB newcolor = color;
+            newcolor.nscale8( 255 - howMuchDarker);
+            return newcolor;
+        }
 
-        if (random8() < DENSITY) {
-            uint8_t seg = random16(num_segs);
-            FOREACH_IN_SEGMENT(panel, seg, idx) {
-                uint16_t i = SEG_LED(panel, idx);
-                if (   leds[i].r < (STARTING_BRIGHTNESS/2)
-                        || leds[i].g < (STARTING_BRIGHTNESS/2)
-                        || leds[i].b < (STARTING_BRIGHTNESS/2)) {
-                    leds[i] = CHSV(OFFSET_HUE(panel, gHue), 255, STARTING_BRIGHTNESS);
-                    setPixelDirection(i, GETTING_BRIGHTER);
+        void brightenOrDarkenEachPixel( fract8 fadeUpAmount, fract8 fadeDownAmount) {
+            for( uint16_t i = 0; i < NUM_LEDS; i++) {
+                if( getPixelDirection(i) == GETTING_DARKER) {
+                    // This pixel is getting darker
+                    leds[i] = makeDarker( leds[i], fadeDownAmount);
+                } else {
+                    // This pixel is getting brighter
+                    leds[i] = makeBrighter( leds[i], fadeUpAmount);
+                    // now check to see if we've maxxed out the brightness
+                    if( leds[i].r == 255 || leds[i].g == 255 || leds[i].b == 255) {
+                        // if so, turn around and start getting darker
+                        setPixelDirection(i, GETTING_DARKER);
+                    }
                 }
             }
         }
-    }
-}
+        static const uint8_t STARTING_BRIGHTNESS = 64;
+        static const uint8_t FADE_IN_SPEED       = 28;
+        static const uint8_t FADE_OUT_SPEED      = 16;
 
-void crawlWithHighlight() {
-    uint8_t offset = 5*gHue;
-    uint16_t pos = beatsin16(BPM, 0, LEDS_PER_PANEL);
-    fadeToBlackBy(leds, NUM_LEDS, 25);
-    for (uint8_t panel = 0; panel < PANELS; panel++) {
-        uint8_t hue = OFFSET_HUE(panel, offset);
-        uint8_t num_segs = NUM_SEGS(panel);
+        static const uint8_t DENSITY             = 12;
 
-        uint16_t offset_pos = pos + num_segs+2;
+    public:
+        void show() override {
+            brightenOrDarkenEachPixel(FADE_IN_SPEED, FADE_OUT_SPEED);
 
-        uint16_t seg;
-        for (seg = 0; seg < num_segs; seg++) {
-            if (offset_pos <= SEG_LAST(panel, seg))
-                break;
-        }
+            for (uint8_t panel = 0; panel < PANELS; panel++) {
+                uint8_t num_segs = NUM_SEGS(panel);
 
-        FOREACH_IN_SEGMENT(panel, seg, idx) {
-            uint8_t bright = 192;
-            if (offset_pos == idx)
-                bright = 255;
-            CHSV c(OFFSET_HUE(panel, hue), 255, bright);
-            leds[SEG_LED(panel, idx)] = c;
-            hue += 15;
-        }
-    }
-}
-
-void chaseThroughPanels() {
-    uint8_t panel_map[][3] = { {1,2,3} , {0,4,5} };
-
-    uint8_t point = beatsin16(3, 0, LEDS_PER_PANEL*3);
-
-    uint8_t pos = point % LEDS_PER_PANEL;
-    uint8_t panel_point = point / LEDS_PER_PANEL;
-    fadeToBlackBy( leds, NUM_LEDS, 1);
-    for (uint8_t panel_idx = 0; panel_idx < 2; panel_idx++) {
-        uint8_t panel = panel_map[panel_idx][panel_point];
-        uint8_t num_segs = NUM_SEGS(panel);
-        uint16_t offset_pos = pos + num_segs+2;
-
-        uint16_t pixel = SEG_LED(panel, offset_pos);
-        leds[pixel] = CHSV(gHue * 5, 255, 255);
-    }
-}
-
-
-void rainbow() {
-    uint8_t offset = 5*gHue;
-    int16_t pos = beatsin16(BPM, 0, LEDS_PER_PANEL);
-    int16_t direction = beatsin16(BPM, -LEDS_PER_PANEL, LEDS_PER_PANEL, 0, 16384);
-
-    for (uint8_t panel = 0; panel < PANELS; panel++) {
-        uint8_t hue = OFFSET_HUE(panel, offset);
-        uint8_t num_segs = NUM_SEGS(panel);
-
-        uint16_t offset_pos = pos + num_segs+2;
-
-        uint16_t seg;
-
-        uint16_t chosen_seg = -1;
-        for (seg = 0; seg < num_segs; seg++) {
-            if (offset_pos <= SEG_LAST(panel, seg) && chosen_seg == -1)
-                break;
-        }
-
-        FOREACH_IN_SEGMENT(panel, seg, idx) {
-            uint8_t bright = 0;
-
-            if (direction >= 0 && offset_pos > idx) {
-                bright = 192;
-            } else if (direction <= 0 && offset_pos < idx) {
-                bright = 192;
+                if (random8() < DENSITY) {
+                    uint8_t seg = random16(num_segs);
+                    FOREACH_IN_SEGMENT(panel, seg, idx) {
+                        uint16_t i = SEG_LED(panel, idx);
+                        if (   leds[i].r < (STARTING_BRIGHTNESS/2)
+                                || leds[i].g < (STARTING_BRIGHTNESS/2)
+                                || leds[i].b < (STARTING_BRIGHTNESS/2)) {
+                            leds[i] = CHSV(OFFSET_HUE(panel, gHue), 255, STARTING_BRIGHTNESS);
+                            setPixelDirection(i, GETTING_BRIGHTER);
+                        }
+                    }
+                }
             }
-
-            if (offset_pos == idx) {
-                bright = 255;
-            }
-
-            if (bright) {
-                leds[SEG_LED(panel, idx)] = CHSV(OFFSET_HUE(panel, hue), 255, bright);
-            }
-            hue += 15;
         }
-    }
-}
+};
 
-void rainbowSegments() {
-    uint8_t offset = gHue;
+class CrawlWithHighlight : public Pattern {
+    public:
+        void show() override {
+            uint8_t offset = 5*gHue;
+            uint16_t pos = beatsin16(BPM, 0, LEDS_PER_PANEL);
+            fadeToBlackBy(leds, NUM_LEDS, 25);
+            for (uint8_t panel = 0; panel < PANELS; panel++) {
+                uint8_t hue = OFFSET_HUE(panel, offset);
+                uint8_t num_segs = NUM_SEGS(panel);
 
-    for (uint8_t panel = 0; panel < PANELS; panel++) {
-        uint8_t hue = OFFSET_HUE(panel, offset);
-        uint8_t num_segs = NUM_SEGS(panel);
+                uint16_t offset_pos = pos + num_segs+2;
 
-        for (int seg = 0; seg < num_segs; seg++) {
-            FOREACH_IN_SEGMENT(panel, seg, idx) {
-                leds[SEG_LED(panel, idx)].setHue(hue);
+                uint16_t seg;
+                for (seg = 0; seg < num_segs; seg++) {
+                    if (offset_pos <= SEG_LAST(panel, seg))
+                        break;
+                }
+
+                FOREACH_IN_SEGMENT(panel, seg, idx) {
+                    uint8_t bright = 192;
+                    if (offset_pos == idx)
+                        bright = 255;
+                    CHSV c(OFFSET_HUE(panel, hue), 255, bright);
+                    leds[SEG_LED(panel, idx)] = c;
+                    hue += 15;
+                }
             }
-            hue += 15;
         }
-    }
-}
+};
 
-void chase(uint8_t hueDelta) {
+class ChaseThroughPanels : public Pattern {
+    public:
+        void show() override {
+            uint8_t panel_map[][3] = { {1,2,3} , {0,4,5} };
+
+            uint8_t point = beatsin16(3, 0, LEDS_PER_PANEL*3);
+
+            uint8_t pos = point % LEDS_PER_PANEL;
+            uint8_t panel_point = point / LEDS_PER_PANEL;
+            fadeToBlackBy( leds, NUM_LEDS, 1);
+            for (uint8_t panel_idx = 0; panel_idx < 2; panel_idx++) {
+                uint8_t panel = panel_map[panel_idx][panel_point];
+                uint8_t num_segs = NUM_SEGS(panel);
+                uint16_t offset_pos = pos + num_segs+2;
+
+                uint16_t pixel = SEG_LED(panel, offset_pos);
+                leds[pixel] = CHSV(gHue * 5, 255, 255);
+            }
+        }
+};
+
+
+class Rainbow : public Pattern {
+    public:
+        void show() override {
+            uint8_t offset = 5*gHue;
+            int16_t pos = beatsin16(BPM, 0, LEDS_PER_PANEL);
+            int16_t direction = beatsin16(BPM, -LEDS_PER_PANEL, LEDS_PER_PANEL, 0, 16384);
+
+            for (uint8_t panel = 0; panel < PANELS; panel++) {
+                uint8_t hue = OFFSET_HUE(panel, offset);
+                uint8_t num_segs = NUM_SEGS(panel);
+
+                uint16_t offset_pos = pos + num_segs+2;
+
+                uint16_t seg;
+
+                uint16_t chosen_seg = -1;
+                for (seg = 0; seg < num_segs; seg++) {
+                    if (offset_pos <= SEG_LAST(panel, seg) && chosen_seg == -1)
+                        break;
+                }
+
+                FOREACH_IN_SEGMENT(panel, seg, idx) {
+                    uint8_t bright = 0;
+
+                    if (direction >= 0 && offset_pos > idx) {
+                        bright = 192;
+                    } else if (direction <= 0 && offset_pos < idx) {
+                        bright = 192;
+                    }
+
+                    if (offset_pos == idx) {
+                        bright = 255;
+                    }
+
+                    if (bright) {
+                        leds[SEG_LED(panel, idx)] = CHSV(OFFSET_HUE(panel, hue), 255, bright);
+                    }
+                    hue += 15;
+                }
+            }
+        }
+};
+
+class RainbowSegments : public Pattern {
+    public:
+        void show() override {
+            uint8_t offset = gHue;
+
+            for (uint8_t panel = 0; panel < PANELS; panel++) {
+                uint8_t hue = OFFSET_HUE(panel, offset);
+                uint8_t num_segs = NUM_SEGS(panel);
+
+                for (int seg = 0; seg < num_segs; seg++) {
+                    FOREACH_IN_SEGMENT(panel, seg, idx) {
+                        leds[SEG_LED(panel, idx)].setHue(hue);
+                    }
+                    hue += 15;
+                }
+            }
+        }
+};
+
+static void chase(uint8_t hueDelta) {
     uint8_t hue = gHue;
     uint16_t pos = beatsin16(BPM, 0, LEDS_PER_PANEL-1);
     fadeToBlackBy( leds, NUM_LEDS, 40);
@@ -470,15 +473,21 @@ void chase(uint8_t hueDelta) {
     }
 }
 
-void chaseSolid() {
-    chase(0);
-}
+class ChaseSolid : public Pattern {
+    public:
+        void show() override {
+            chase(0);
+        }
+};
 
-void chaseRainbow() {
-    chase(15);
-}
+class ChaseRainbow : public Pattern {
+    public:
+        void show() override {
+            chase(15);
+        }
+};
 
-void sweepTwo(bool solid) { // sweep simultaneously across two Us
+static void sweepTwo(bool solid) { // sweep simultaneously across two Us
     //1,2,3 5,4,0
 
     fadeToBlackBy( leds, NUM_LEDS, 40);
@@ -519,206 +528,307 @@ void sweepTwo(bool solid) { // sweep simultaneously across two Us
     }
 }
 
-void sweepTwoSolid() {
-    sweepTwo(true);
-}
-
-void sweepTwoRainbow() {
-    sweepTwo(false);
-}
-
-void pulse() {
-    uint8_t beat = beatsin16(12, 64, 255);
-    uint8_t offset = 5*gHue;
-
-    for (uint8_t panel = 0; panel < PANELS; panel++) {
-        uint8_t hue = OFFSET_HUE(panel, offset);
-        uint8_t num_segs = NUM_SEGS(panel);
-
-        for (int seg = 0; seg < num_segs; seg++) {
-            FOREACH_IN_SEGMENT(panel, seg, idx) {
-                CHSV c(OFFSET_HUE(panel, hue), 255, beat);
-                leds[SEG_LED(panel, idx)] = c;
-                hue += 15;
-            }
+class SweepTwoSolid : public Pattern {
+    public:
+        void show() override {
+            sweepTwo(true);
         }
-    }
-}
+};
 
-void flickerSegments() {
-    uint8_t offset = gHue;
-
-    if (random16(2)) {
-        fadeToBlackBy(leds, NUM_LEDS, 25);
-        return;
-    }
-
-
-    for (uint8_t i = 0; i < PANELS/3; i++) {
-
-        uint8_t panel = random16(PANELS);
-
-        uint8_t hue = OFFSET_HUE(panel, offset);
-        uint8_t num_segs = NUM_SEGS(panel);
-
-        int seg = random16(num_segs);
-
-        FOREACH_IN_SEGMENT(panel, seg, idx) {
-            leds[SEG_LED(panel, idx)].setHue(hue);
-            hue += 15;
+class SweepTwoRainbow : public Pattern {
+    public:
+        void show() override {
+            sweepTwo(false);
         }
-    }
-    fadeToBlackBy( leds, NUM_LEDS, 25);
-}
+};
 
-void fillSolid() {
-    uint8_t bright = beatsin16(BPM, 128, 255);
-    for (uint8_t panel = 0; panel < PANELS; panel++) {
-        fill_solid(
-                &leds[PIXEL_IN_PANEL(panel, 0)],
-                LEDS_PER_PANEL,
-                CHSV(OFFSET_HUE(panel, gHue), 255, bright)
-                );
-    }
-}
+class Pulse : public Pattern {
+    public:
+        void show() override {
+            uint8_t beat = beatsin16(12, 64, 255);
+            uint8_t offset = 5*gHue;
 
-void nextCue() {
-#ifndef SINGLE_PATTERN_DEBUG
-    gCurrentCue = (gCurrentCue + 1) % NUM_CUES;
+            for (uint8_t panel = 0; panel < PANELS; panel++) {
+                uint8_t hue = OFFSET_HUE(panel, offset);
+                uint8_t num_segs = NUM_SEGS(panel);
 
-    if (gCurrentCue == TRANSITION_CHANGE_CUE) {
-        gCurrentPatternNumber = random16(ARRAY_SIZE(gTransitions));
-    } else if (gCurrentCue == PATTERN_CHANGE_CUE) {
-        gCurrentPatternNumber = random16(ARRAY_SIZE(gPatterns));
-    }
-#else
-    gCurrentCue = PATTERN_CHANGE_CUE;
-    gCurrentPatternNumber = 0;
-#endif
-}
-
-void showCurrentPattern() {
-    uint64_t start = get_millisecond_timer();
-    if (gCurrentCue == TRANSITION_CHANGE_CUE) {
-        gTransitions[gCurrentPatternNumber]();
-    } else {
-        gPatterns[gCurrentPatternNumber]();
-    }
-    FastLED.show();
-    uint64_t end = get_millisecond_timer();
-    uint64_t duration = 0;
-    if (end > start) {
-        duration = end - start;
-    }
-
-    FastLED.delay(WAIT-duration);
-}
-
-
-void sweepPlane() {
-    fadeToBlackBy(leds, NUM_LEDS, 50);
-    uint8_t z = beatsin16(15, 0, LEDS_PER_ROW);
-
-    uint8_t hue = gHue;
-
-    for (uint8_t x = 0; x < LEDS_PER_ROW; x++) {
-        for (uint8_t y = 0; y < LEDS_PER_ROW; y++) {
-            if (x == 0 || x == LEDS_PER_ROW-1 || y == 0 || y == LEDS_PER_ROW-1) {
-                setPixel3d(x,y,z, CHSV(hue, 255, 255));
-                setPixel3d(x,y,z, CHSV(hue, 255, 255));
-                setPixel3d(x,y,LEDS_PER_ROW-z-1, CHSV(hue+128, 255, 255));
-
-                uint8_t x1 = z;
-                uint8_t y1 = x;
-                uint8_t z1 = y;
-
-                setPixel3d(x1,y1,z1, CHSV(hue, 255, 255));
-                setPixel3d(LEDS_PER_ROW-x1-1, y1, z1, CHSV(hue+128, 255, 255));
-
-                /*
-                   uint8_t y2 = z;
-                   uint8_t x2 = y;
-                   uint8_t z2 = x;
-                   setPixel3d(x2,y2,z2, CHSV(hue, 255, 255));
-                   setPixel3d(x2,LEDS_PER_ROW-y2-1,z2, CHSV(hue+128, 255, 255));
-                   */
-                hue+=5;
-            }
-        }
-    }
-}
-
-void makeWaves() {
-    fadeToBlackBy(leds, NUM_LEDS, 25);
-    uint16_t base = scale16(beat16(25), (LEDS_PER_ROW+8));
-
-    for (uint8_t i = 0; i < LEDS_PER_ROW+8; i+= 6) {
-        makeWave((base + i) % (LEDS_PER_ROW+8), gHue+(30*i), 255);
-        makeWave((base + 1+ i) % (LEDS_PER_ROW+8), gHue+(30*i), 128);
-        makeWave((base + 2+ i) % (LEDS_PER_ROW+8), gHue+(30*i), 32);
-    }
-}
-
-void makeWave(uint8_t z, uint8_t hue, uint8_t bright) {
-    if (z < 4) {
-        uint8_t width = z*2;
-        for (uint8_t x = 0; x < width; x++) {
-            for (uint8_t y = 0; y < width; y++) {
-                if (x == 0 || x == width-1 || y == 0 || y == width-1) {
-                    uint8_t start = 4-z;
-                    setPixel3d(start+x, start+y, 0, CHSV(hue, 255, bright));
-                    hue += 5;
+                for (int seg = 0; seg < num_segs; seg++) {
+                    FOREACH_IN_SEGMENT(panel, seg, idx) {
+                        CHSV c(OFFSET_HUE(panel, hue), 255, beat);
+                        leds[SEG_LED(panel, idx)] = c;
+                        hue += 15;
+                    }
                 }
             }
         }
-    } else if (z >= LEDS_PER_ROW + 4) {
-        z = (LEDS_PER_ROW+8) - z - 1;
-        uint8_t width = z*2;
-        for (uint8_t x = 0; x < width; x++) {
-            for (uint8_t y = 0; y < width; y++) {
-                if (x == 0 || x == width-1 || y == 0 || y == width-1) {
-                    uint8_t start = 4-z;
-                    setPixel3d(start+x, start+y, LEDS_PER_ROW-1, CHSV(hue, 255, bright));
-                    hue += 5;
+};
+
+class FlickerSegments : public Pattern {
+    public:
+        void show() override {
+            uint8_t offset = gHue;
+
+            if (random16(2)) {
+                fadeToBlackBy(leds, NUM_LEDS, 25);
+                return;
+            }
+
+
+            for (uint8_t i = 0; i < PANELS/3; i++) {
+
+                uint8_t panel = random16(PANELS);
+
+                uint8_t hue = OFFSET_HUE(panel, offset);
+                uint8_t num_segs = NUM_SEGS(panel);
+
+                int seg = random16(num_segs);
+
+                FOREACH_IN_SEGMENT(panel, seg, idx) {
+                    leds[SEG_LED(panel, idx)].setHue(hue);
+                    hue += 15;
+                }
+            }
+            fadeToBlackBy( leds, NUM_LEDS, 25);
+        }
+};
+
+class FillSolid : public Pattern {
+    public:
+        void show() override {
+            uint8_t bright = beatsin16(BPM, 128, 255);
+            for (uint8_t panel = 0; panel < PANELS; panel++) {
+                fill_solid(
+                        &leds[PIXEL_IN_PANEL(panel, 0)],
+                        LEDS_PER_PANEL,
+                        CHSV(OFFSET_HUE(panel, gHue), 255, bright)
+                        );
+            }
+        }
+};
+
+
+class SweepPlane : public Pattern {
+    public:
+        void show() override {
+            fadeToBlackBy(leds, NUM_LEDS, 50);
+            uint8_t z = beatsin16(15, 0, LEDS_PER_ROW);
+
+            uint8_t hue = gHue;
+
+            for (uint8_t x = 0; x < LEDS_PER_ROW; x++) {
+                for (uint8_t y = 0; y < LEDS_PER_ROW; y++) {
+                    if (x == 0 || x == LEDS_PER_ROW-1 || y == 0 || y == LEDS_PER_ROW-1) {
+                        setPixel3d(x,y,z, CHSV(hue, 255, 255));
+                        setPixel3d(x,y,z, CHSV(hue, 255, 255));
+                        setPixel3d(x,y,LEDS_PER_ROW-z-1, CHSV(hue+128, 255, 255));
+
+                        uint8_t x1 = z;
+                        uint8_t y1 = x;
+                        uint8_t z1 = y;
+
+                        setPixel3d(x1,y1,z1, CHSV(hue, 255, 255));
+                        setPixel3d(LEDS_PER_ROW-x1-1, y1, z1, CHSV(hue+128, 255, 255));
+
+                        hue+=5;
+                    }
                 }
             }
         }
-    } else {
-        z -= 4;
-        for (uint8_t x = 0; x < LEDS_PER_ROW; x++) {
-            for (uint8_t y = 0; y < LEDS_PER_ROW; y++) {
-                if (x == 0 || x == LEDS_PER_ROW-1 || y == 0 || y == LEDS_PER_ROW-1) {
-                    setPixel3d(x,y,z, CHSV(hue, 255, bright));
-                    hue += 5;
+};
+
+class MakeWaves : public Pattern {
+    private:
+        void beginWave(uint8_t z, uint8_t hue, uint8_t bright) {
+            uint8_t width = z*2;
+            for (uint8_t x = 0; x < width; x++) {
+                for (uint8_t y = 0; y < width; y++) {
+                    if (x == 0 || x == width-1 || y == 0 || y == width-1) {
+                        uint8_t start = 4-z;
+                        setPixel3d(start+x, start+y, 0, CHSV(hue, 255, bright));
+                        hue += 5;
+                    }
                 }
             }
         }
-    }
-}
+
+        void endWave(uint8_t z, uint8_t hue, uint8_t bright) {
+            uint8_t width = z*2;
+            for (uint8_t x = 0; x < width; x++) {
+                for (uint8_t y = 0; y < width; y++) {
+                    if (x == 0 || x == width-1 || y == 0 || y == width-1) {
+                        uint8_t start = 4-z;
+                        setPixel3d(start+x, start+y, LEDS_PER_ROW-1, CHSV(hue, 255, bright));
+                        hue += 5;
+                    }
+                }
+            }
+        }
+
+        void midWave(uint8_t z, uint8_t hue, uint8_t bright) {
+            for (uint8_t x = 0; x < LEDS_PER_ROW; x++) {
+                for (uint8_t y = 0; y < LEDS_PER_ROW; y++) {
+                    if (x == 0 || x == LEDS_PER_ROW-1 || y == 0 || y == LEDS_PER_ROW-1) {
+                        setPixel3d(x,y,z, CHSV(hue, 255, bright));
+                        hue += 5;
+                    }
+                }
+            }
+        }
+
+        void makeWave(uint8_t z, uint8_t hue, uint8_t bright) {
+            if (z < 4) {
+                beginWave(z, hue, bright);
+            } else if (z >= LEDS_PER_ROW + 4) {
+                endWave((LEDS_PER_ROW+8) - z - 1, hue, bright);
+            } else {
+                midWave(z-4, hue, bright);
+            }
+        }
+    public:
+
+        void show() override {
+            fadeToBlackBy(leds, NUM_LEDS, 25);
+            uint16_t base = scale16(beat16(25), (LEDS_PER_ROW+8));
+
+            for (uint8_t i = 0; i < LEDS_PER_ROW+8; i+= 6) {
+                makeWave((base + i) % (LEDS_PER_ROW+8), gHue+(30*i), 255);
+                makeWave((base + 1+ i) % (LEDS_PER_ROW+8), gHue+(30*i), 128);
+                makeWave((base + 2+ i) % (LEDS_PER_ROW+8), gHue+(30*i), 32);
+            }
+        }
+};
+
 
 //void rain() {
-//    fill_solid(leds, NUM_LEDS, CRGB::Black);
-//    for (uint8_t idx = 0; idx < NUM_DROPLETS; ++idx) {
-//        droplets[idx].step(leds);
-//    }
 //}
 //
 //void testPattern() {
 //    rain();
 //}
 
-void fallingPlanes() {
-    fadeToBlackBy(leds, NUM_LEDS, 25);
-    Vector3f accelDir = accelerometerDirection();
-//TODO Falling with gravity.
-    int8_t y = -4 + scale16(beat16(30), LEDS_PER_ROW+4);
-
-    for (int8_t x = -4; x < LEDS_PER_ROW+4; x++) {
-        for (int8_t z = -4; z < LEDS_PER_ROW+4; z++) {
-            setPixel3dCompensated(accelDir, x, y, z, CHSV(gHue,255,255));
+class FallingPlanes : public Pattern {
+    private:
+        uint16_t pos;
+        uint16_t speed;
+        const uint16_t gravity = 5;
+    public:
+        void setup() {
+            pos = 0;
+            speed = 0;
         }
+        void show() override {
+            fadeToBlackBy(leds, NUM_LEDS, 25);
+            Vector3f accelDir = accelerometerDirection();
+            //TODO Falling with gravity.
+            //
+            pos += speed;
+            speed += gravity;
+
+            int8_t y = pos >> 8;
+            y -= 4;
+
+
+            for (int8_t x = -4; x < LEDS_PER_ROW+4; x++) {
+                for (int8_t z = -4; z < LEDS_PER_ROW+4; z++) {
+                    setPixel3dCompensated(accelDir, x, y, z, CHSV(gHue,255,255));
+                }
+            }
+            if (y >= LEDS_PER_ROW + 4) {
+                setup();
+            }
+        }
+};
+
+class RGBCube : public Pattern {
+    public:
+        void show() override {
+            for (uint8_t x = -4; x < LEDS_PER_ROW+4; x++) {
+                for (uint8_t y = -4; y < LEDS_PER_ROW+4; y++) {
+                    for (uint8_t z = -4; z < LEDS_PER_ROW+4; z++) {
+                        uint8_t r = (x+4)*(256/16);
+                        uint8_t g = (y+4)*(256/16);
+                        uint8_t b = (z+4)*(256/16);
+
+                        setPixel3dCompensated(accelerometerDirection(),
+                                x,y,z,
+                                CRGB(r,g,b)
+                        );
+                    }
+                }
+            }
+        }
+};
+
+//TODO: generalize pattern list
+static Pattern * const gTransitions[] = {
+    new RainbowSegments(),
+    new Pulse(),
+    new FillSolid()
+};
+static Pattern * const gPatterns[] = {
+    //new RGBCube(),
+    new FallingPlanes(),
+    new Rain(),
+    new MakeWaves(),
+    new ChaseThroughPanels(),
+    new Rainbow(),
+    new PulseSegments(),
+    new CrawlWithHighlight(),
+    new ChaseRainbow(),
+    new FlickerSegments(),
+    new ChaseSolid(),
+    new SweepTwoSolid(),
+    new SweepTwoRainbow(),
+};
+
+#define NUM_CUES 7
+#define SECONDS_PER_CUE 30
+
+#define TRANSITION_CHANGE_CUE 0
+#define PATTERN_CHANGE_CUE 1
+
+#define RANDOM_FROM_ARRAY(arr) arr[random16(ARRAY_SIZE(arr))]
+
+
+static uint8_t gCurrentCue = 0;
+
+static Pattern *currentPattern = NULL;
+
+void nextCue() {
+#ifndef SINGLE_PATTERN_DEBUG
+    gCurrentCue = (gCurrentCue + 1) % NUM_CUES;
+    Pattern *oldPattern = currentPattern;
+
+    if (gCurrentCue == TRANSITION_CHANGE_CUE) {
+        currentPattern = RANDOM_FROM_ARRAY(gTransitions);
+    } else if (gCurrentCue == PATTERN_CHANGE_CUE) {
+        currentPattern = RANDOM_FROM_ARRAY(gPatterns);
     }
 
+    if (oldPattern != currentPattern) {
+        oldPattern->teardown();
+        currentPattern->setup();
+    }
+#else
+    (void)gCurrentCue;
+    if (!currentPattern) {
+        currentPattern = gPatterns[0];
+        currentPattern->setup();
+    }
+#endif
+
+}
+
+void showCurrentPattern() {
+    uint64_t start = get_millisecond_timer();
+    currentPattern->show();
+    FastLED.show();
+    uint64_t end = get_millisecond_timer();
+    uint64_t duration = 0;
+    if (end > start) {
+        duration = end - start;
+    }
+    FastLED.delay(WAIT-duration);
 }
 
 void loop() {
