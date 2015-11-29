@@ -649,23 +649,24 @@ void sweepPlane() {
 }
 
 void makeWaves() {
-    fadeToBlackBy(leds, NUM_LEDS, 75);
-    uint8_t base = scale16(beat16(20), LEDS_PER_ROW+8);
-
+    fadeToBlackBy(leds, NUM_LEDS, 25);
+    uint16_t base = scale16(beat16(25), (LEDS_PER_ROW+8));
 
     for (uint8_t i = 0; i < LEDS_PER_ROW+8; i+= 6) {
-        makeWave((base + i) % (LEDS_PER_ROW+8), gHue+(30*i));
+        makeWave((base + i) % (LEDS_PER_ROW+8), gHue+(30*i), 255);
+        makeWave((base + 1+ i) % (LEDS_PER_ROW+8), gHue+(30*i), 128);
+        makeWave((base + 2+ i) % (LEDS_PER_ROW+8), gHue+(30*i), 32);
     }
 }
 
-void makeWave(uint8_t z, uint8_t hue) {
+void makeWave(uint8_t z, uint8_t hue, uint8_t bright) {
     if (z < 4) {
         uint8_t width = z*2;
         for (uint8_t x = 0; x < width; x++) {
             for (uint8_t y = 0; y < width; y++) {
                 if (x == 0 || x == width-1 || y == 0 || y == width-1) {
                     uint8_t start = 4-z;
-                    setPixel3d(start+x, start+y, 0, CHSV(hue, 255, 255));
+                    setPixel3d(start+x, start+y, 0, CHSV(hue, 255, bright));
                     hue += 5;
                 }
             }
@@ -677,7 +678,7 @@ void makeWave(uint8_t z, uint8_t hue) {
             for (uint8_t y = 0; y < width; y++) {
                 if (x == 0 || x == width-1 || y == 0 || y == width-1) {
                     uint8_t start = 4-z;
-                    setPixel3d(start+x, start+y, LEDS_PER_ROW-1, CHSV(hue, 255, 255));
+                    setPixel3d(start+x, start+y, LEDS_PER_ROW-1, CHSV(hue, 255, bright));
                     hue += 5;
                 }
             }
@@ -687,7 +688,7 @@ void makeWave(uint8_t z, uint8_t hue) {
         for (uint8_t x = 0; x < LEDS_PER_ROW; x++) {
             for (uint8_t y = 0; y < LEDS_PER_ROW; y++) {
                 if (x == 0 || x == LEDS_PER_ROW-1 || y == 0 || y == LEDS_PER_ROW-1) {
-                    setPixel3d(x,y,z, CHSV(hue, 255, 255));
+                    setPixel3d(x,y,z, CHSV(hue, 255, bright));
                     hue += 5;
                 }
             }
