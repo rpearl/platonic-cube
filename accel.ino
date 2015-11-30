@@ -47,7 +47,7 @@ static Quaternion correction;
 
 void initAccelerometer() {
     Vector3f initialDirection = uncorrectedDirection();
-    correction = getRotationFromTo(initialDirection, -Vector3f::UnitY);
+    correction = getRotationFromTo(normalize(initialDirection), -Vector3f::UnitY);
 }
 
 
