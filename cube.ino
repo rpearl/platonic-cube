@@ -398,49 +398,6 @@ class ChaseThroughPanels : public Pattern {
 };
 
 
-class Rainbow : public Pattern {
-    public:
-        void show() override {
-            uint8_t offset = 5*gHue;
-            int16_t pos = beatsin16(BPM, 0, LEDS_PER_PANEL);
-            int16_t direction = beatsin16(BPM, -LEDS_PER_PANEL, LEDS_PER_PANEL, 0, 16384);
-
-            for (uint8_t panel = 0; panel < PANELS; panel++) {
-                uint8_t hue = OFFSET_HUE(panel, offset);
-                uint8_t num_segs = NUM_SEGS(panel);
-
-                uint16_t offset_pos = pos + num_segs+2;
-
-                uint16_t seg;
-
-                uint16_t chosen_seg = -1;
-                for (seg = 0; seg < num_segs; seg++) {
-                    if (offset_pos <= SEG_LAST(panel, seg) && chosen_seg == -1)
-                        break;
-                }
-
-                FOREACH_IN_SEGMENT(panel, seg, idx) {
-                    uint8_t bright = 0;
-
-                    if (direction >= 0 && offset_pos > idx) {
-                        bright = 192;
-                    } else if (direction <= 0 && offset_pos < idx) {
-                        bright = 192;
-                    }
-
-                    if (offset_pos == idx) {
-                        bright = 255;
-                    }
-
-                    if (bright) {
-                        leds[SEG_LED(panel, idx)] = CHSV(OFFSET_HUE(panel, hue), 255, bright);
-                    }
-                    hue += 15;
-                }
-            }
-        }
-};
-
 class RainbowSegments : public Pattern {
     public:
         void show() override {
@@ -781,7 +738,6 @@ static Pattern * const gPatterns[] = {
     new Rain(),
     new MakeWaves(),
     new ChaseThroughPanels(),
-    new Rainbow(),
     new PulseSegments(),
     new CrawlWithHighlight(),
     new ChaseRainbow(),
