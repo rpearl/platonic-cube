@@ -296,6 +296,23 @@ class RelativelyPrimeFade : public Pattern {
         }
 };
 
+class TestSegments : public Pattern {
+    public:
+        void show() override {
+            uint8_t panel = 4;
+            uint8_t hue = 0;
+            uint8_t num_segs = NUM_SEGS(panel);
+            for (int seg = 0; seg < num_segs; seg++) {
+                FOREACH_IN_SEGMENT(panel, seg, idx) {
+                    leds[SEG_LED(panel, idx)] = CHSV(hue, 255, 255);
+                }
+                hue += 30;
+            }
+        }
+};
+
+
+
 class PulseSegments : public Pattern {
     private:
         enum { GETTING_DARKER = 0, GETTING_BRIGHTER = 1 };
