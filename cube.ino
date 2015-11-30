@@ -855,6 +855,9 @@ void loop() {
 
     EVERY_N_MILLISECONDS(20) {
         gHue++;
+    }
+
+    EVERY_N_MILLISECONDS(5) {
         sampleAccelerometer();
     }
 
