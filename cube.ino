@@ -847,13 +847,7 @@ void showCurrentPattern() {
     if (end > start) {
         duration = end - start;
     }
-    int64_t wait = WAIT-duration;
-    if (wait < 0) {
-        wait = 0;
-    }
-    if (wait > WAIT) {
-        wait = wait;
-    }
+    int64_t wait = constrain(WAIT-duration, 0, WAIT);
     FastLED.delay(wait);
 }
 
