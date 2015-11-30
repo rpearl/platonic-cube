@@ -91,7 +91,7 @@ CoordList getPixel3d(int8_t x, int8_t y, int8_t z) {
     }
 
     if (y == 0) {
-        out.push_back(PIXEL_IN_PANEL(5, P(FLIP(x), FLIP(z))));
+        out.push_back(PIXEL_IN_PANEL(5, P(FLIP(z), FLIP(x))));
     } else if (y == LEDS_PER_ROW-1) {
         out.push_back(PIXEL_IN_PANEL(0, P(x, FLIP(z))));
     }
