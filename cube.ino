@@ -1,11 +1,13 @@
 /* vim: set ts=8 sts=4 et sw=4 tw=99: */
 #define USE_GET_MILLISECOND_TIMER
 #include <FastLED.h>
+#include <algorithm>
 #include "cube.h"
 #include "vector3.h"
 #include "cube_util.h"
 #include "accel.h"
 #include "pattern.h"
+
 
 extern "C" {
     int _getpid(){ return -1;}
@@ -108,7 +110,11 @@ static const PROGMEM int8_t segments[PANELS][LEDS_PER_PANEL + 11] = {
         -1, -1
     },
 };
-
+static const uint8_t primes[] = {
+    2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
+    31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
+    73, 79, 83, 89, 97, 101, 103, 107, 109, 113,
+};
 uint8_t gHue = 0;
 
 class Rain : public Pattern {
@@ -270,6 +276,25 @@ void setup() {
     FastLED.setCorrection(TypicalSMD5050);
     FastLED.setBrightness(40);
 }
+
+class RelativelyPrimeFade : public Pattern {
+    public:
+        void show() override {
+            uint8_t hue = 2*gHue;
+            for (uint8_t panel = 0; panel < PANELS; panel++) {
+                uint8_t num_segs = NUM_SEGS(panel);
+
+                for (int seg = 0; seg < num_segs; seg++) {
+                    FOREACH_IN_SEGMENT(panel, seg, idx) {
+                        uint8_t bright = beatsin16(primes[seg+6], 0, 255);
+                        CHSV c(hue, 255, bright);
+                        leds[SEG_LED(panel, idx)] = c;
+                        hue += 5;
+                    }
+                }
+            }
+        }
+};
 
 class PulseSegments : public Pattern {
     private:
@@ -520,6 +545,31 @@ class Pulse : public Pattern {
         }
 };
 
+class RainbowBrightnessChase : public Pattern {
+    public:
+        void show() override {
+            uint16_t pos = beatsin16(BPM, 0, LEDS_PER_PANEL);
+            int16_t direction = beatsin16(BPM, -LEDS_PER_PANEL, LEDS_PER_PANEL, 0, 16384);
+            uint8_t hue = gHue;
+            for (uint8_t panel = 0; panel < PANELS; panel++) {
+                uint8_t num_segs = NUM_SEGS(panel);
+
+                for (int seg = 0; seg < num_segs; seg++) {
+                    uint16_t bright_idx = pos+num_segs+2;
+                    FOREACH_IN_SEGMENT(panel, seg, idx) {
+                        int16_t distance = std::max(abs(bright_idx - idx), 16);
+
+                        uint8_t bright = 255 - 16*distance;
+
+                        CHSV c(hue, 255, bright);
+                        leds[SEG_LED(panel, idx)] = c;
+                        hue += 5;
+                    }
+                }
+            }
+        }
+};
+
 class FlickerSegments : public Pattern {
     public:
         void show() override {
@@ -729,10 +779,12 @@ class RainbowGravity : public Pattern {
 static Pattern * const gTransitions[] = {
     new RainbowSegments(),
     new Pulse(),
-    new FillSolid()
+    new FillSolid(),
+    new RainbowGravity(),
+    new RainbowBrightnessChase(),
 };
 static Pattern * const gPatterns[] = {
-    new RainbowGravity(),
+    new RelativelyPrimeFade(),
     new LaunchingPlanes(),
     new FallingPlanes(),
     new Rain(),
