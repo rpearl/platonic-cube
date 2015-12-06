@@ -452,6 +452,77 @@ class ChaseThroughPanels : public Pattern {
         }
 };
 
+class HeightfieldRipple : public Pattern {
+    typedef __fp16 real;
+    private:
+        real height[PANELS][LEDS_PER_ROW][LEDS_PER_ROW];
+        real v[PANELS][LEDS_PER_ROW][LEDS_PER_ROW];
+        uint64_t last = 0;
+        uint8_t curpanel = 0;
+        void droplet(uint8_t panel) {
+            uint8_t i = random8(LEDS_PER_ROW-1);
+            uint8_t j = random8(LEDS_PER_ROW-1);
+            height[panel][i  ][j  ] += 384;
+            height[panel][i+1][j  ] += 384;
+            height[panel][i  ][j+1] += 384;
+            height[panel][i+1][j+1] += 384;
+            v[panel][i  ][j  ] = 0;
+            v[panel][i+1][j  ] = 0;
+            v[panel][i  ][j+1] = 0;
+            v[panel][i+1][j+1] = 0;
+        }
+
+        void update_heights() {
+            for (uint8_t panel = 0; panel < PANELS; panel++) {
+                for (int8_t i = 0; i < LEDS_PER_ROW; i++) {
+                    for (int8_t j = 0; j < LEDS_PER_ROW; j++) {
+                        auto e = height[panel][MIN(i+1, LEDS_PER_ROW-1)][j];
+                        auto w = height[panel][MAX(i-1, 0)][j];
+                        auto n = height[panel][i][MIN(j+1, LEDS_PER_ROW-1)];
+                        auto s = height[panel][i][MAX(j-1, 0)];
+
+                        v[panel][i][j] += ((n+e+s+w)/4 - height[panel][i][j]);
+                        v[panel][i][j] *= 0.70;
+                        height[panel][i][j] += v[panel][i][j];
+                        height[panel][i][j] = MAX(32, height[panel][i][j] - 0.25);
+                    }
+                }
+            }
+
+        }
+
+
+    public:
+        void setup() {
+            for (uint8_t panel = 0; panel < PANELS; panel++) {
+                for (int8_t i = 0; i < LEDS_PER_ROW; i++) {
+                    for (int8_t j = 0; j < LEDS_PER_ROW; j++) {
+                        height[panel][i][j] = 64;
+                        v[panel][i][j] = 0;
+                    }
+                }
+            }
+        }
+
+        void show() override {
+            uint64_t cur = get_millisecond_timer();
+            if (cur-last > 1000/PANELS) {
+                droplet(curpanel);
+                last = cur;
+                curpanel = (curpanel+1) % PANELS;
+            }
+            for (uint8_t panel = 0; panel < PANELS; panel++) {
+                for (int8_t i = 0; i < LEDS_PER_ROW; i++) {
+                    for (int8_t j = 0; j < LEDS_PER_ROW; j++) {
+                        uint8_t bright = constrain(height[panel][i][j], 0, 255);
+                        leds[PIXEL_IN_PANEL(panel, P(i,j))] = CHSV(gHue, 255, bright);
+                    }
+                }
+            }
+            update_heights();
+        }
+};
+
 
 class RainbowSegments : public Pattern {
     public:
@@ -814,6 +885,7 @@ static Pattern * const gTransitions[] = {
     new RainbowBrightnessChase(),
 };
 static Pattern * const gPatterns[] = {
+    new HeightfieldRipple(),
     new RelativelyPrimeFade(),
     new LaunchingPlanes(),
     new FallingPlanes(),
