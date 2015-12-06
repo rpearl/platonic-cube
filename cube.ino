@@ -278,7 +278,22 @@ void setup() {
 }
 
 class RelativelyPrimeFade : public Pattern {
+    private:
+        uint8_t shuffled[9];
     public:
+        void setup() {
+            uint8_t n = ARRAY_SIZE(shuffled);
+            for (uint8_t i = 0; i < n; i++) {
+                shuffled[i] = primes[i+6];
+            }
+
+            for (uint8_t i = 0; i < n-2; i++) {
+                uint8_t j = random8(i, n);
+                uint8_t temp = shuffled[i];
+                shuffled[i] = shuffled[j];
+                shuffled[j] = temp;
+            }
+        }
         void show() override {
             uint8_t hue = 2*gHue;
             for (uint8_t panel = 0; panel < PANELS; panel++) {
@@ -286,7 +301,7 @@ class RelativelyPrimeFade : public Pattern {
 
                 for (int seg = 0; seg < num_segs; seg++) {
                     FOREACH_IN_SEGMENT(panel, seg, idx) {
-                        uint8_t bright = beatsin16(primes[seg+6], 0, 255);
+                        uint8_t bright = beatsin16(shuffled[seg], 0, 255);
                         CHSV c(hue, 255, bright);
                         leds[SEG_LED(panel, idx)] = c;
                         hue += 5;
@@ -310,8 +325,6 @@ class TestSegments : public Pattern {
             }
         }
 };
-
-
 
 class PulseSegments : public Pattern {
     private:
