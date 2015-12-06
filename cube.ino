@@ -455,36 +455,122 @@ class ChaseThroughPanels : public Pattern {
 class HeightfieldRipple : public Pattern {
     typedef __fp16 real;
     private:
-        real height[PANELS][LEDS_PER_ROW][LEDS_PER_ROW];
-        real v[PANELS][LEDS_PER_ROW][LEDS_PER_ROW];
+        uint16_t up(uint8_t panel, uint8_t i, uint8_t j) {
+            if (i < LEDS_PER_ROW-1) {
+                return PIXEL_IN_PANEL(panel, P(i+1, j));
+            }
+
+            switch (panel) {
+                case 0:
+                    return PIXEL_IN_PANEL(2, P(0, j));
+                case 1:
+                    return PIXEL_IN_PANEL(5, P(0, j));
+                case 2:
+                    return PIXEL_IN_PANEL(5, P(j,LEDS_PER_ROW-1));
+                case 3:
+                    return PIXEL_IN_PANEL(5, P(LEDS_PER_ROW-1, FLIP(j)));
+                case 4:
+                    return PIXEL_IN_PANEL(5, P(FLIP(j), 0));
+                case 5:
+                    return PIXEL_IN_PANEL(3, P(LEDS_PER_ROW-1, FLIP(j)));
+            }
+            return 0;
+        }
+
+        uint16_t down(uint8_t panel, uint8_t i, uint8_t j) {
+            if (i > 0) {
+                return PIXEL_IN_PANEL(panel, P(i-1, j));
+            }
+
+            switch (panel) {
+                case 0:
+                    return PIXEL_IN_PANEL(4, P(0, FLIP(j)));
+                case 1:
+                    return PIXEL_IN_PANEL(0, P(j, 0));
+                case 2:
+                    return PIXEL_IN_PANEL(0, P(LEDS_PER_ROW-1, j));
+                case 3:
+                    return PIXEL_IN_PANEL(0, P(FLIP(j), LEDS_PER_ROW-1));
+                case 4:
+                    return PIXEL_IN_PANEL(0, P(0, FLIP(j)));
+                case 5:
+                    return PIXEL_IN_PANEL(1, P(LEDS_PER_ROW-1, j));
+            }
+            return 0;
+        }
+
+        uint16_t left(uint8_t panel, uint8_t i, uint8_t j) {
+            if (j > 0) {
+                return PIXEL_IN_PANEL(panel, P(i, j-1));
+            }
+
+            switch (panel) {
+                case 0:
+                    return PIXEL_IN_PANEL(1, P(0, i));
+                case 5:
+                    return PIXEL_IN_PANEL(4, P(LEDS_PER_ROW-1, FLIP(i)));
+                default:
+                    uint8_t new_panel = panel-1;
+                    if (new_panel == 0) {
+                        new_panel = 4;
+                    }
+
+                    return PIXEL_IN_PANEL(new_panel, P(i, LEDS_PER_ROW-1));
+            }
+            return 0;
+        }
+
+        uint16_t right(uint8_t panel, uint8_t i, uint8_t j) {
+            if (j < LEDS_PER_ROW-1) {
+                return PIXEL_IN_PANEL(panel, P(i, j+1));
+            }
+            switch (panel) {
+                case 0:
+                    return PIXEL_IN_PANEL(3, P(0, FLIP(i)));
+                case 5:
+                    return PIXEL_IN_PANEL(2, P(LEDS_PER_ROW-1, i));
+                default:
+                    uint8_t new_panel = panel+1;
+                    if (new_panel == 5) {
+                        new_panel = 1;
+                    }
+                    return PIXEL_IN_PANEL(new_panel, P(i, 0));
+            }
+            return 0;
+        }
+
+
+        real height[PANELS * LEDS_PER_PANEL];
+        real v[PANELS * LEDS_PER_PANEL];
         uint64_t last = 0;
-        uint8_t curpanel = 0;
         void droplet(uint8_t panel) {
             uint8_t i = random8(LEDS_PER_ROW-1);
             uint8_t j = random8(LEDS_PER_ROW-1);
-            height[panel][i  ][j  ] += 384;
-            height[panel][i+1][j  ] += 384;
-            height[panel][i  ][j+1] += 384;
-            height[panel][i+1][j+1] += 384;
-            v[panel][i  ][j  ] = 0;
-            v[panel][i+1][j  ] = 0;
-            v[panel][i  ][j+1] = 0;
-            v[panel][i+1][j+1] = 0;
+            height[PIXEL_IN_PANEL(panel, P(i  ,j  ))] += 512;
+            height[PIXEL_IN_PANEL(panel, P(i+1,j  ))] += 512;
+            height[PIXEL_IN_PANEL(panel, P(i  ,j+1))] += 512;
+            height[PIXEL_IN_PANEL(panel, P(i+1,j+1))] += 512;
+            v[PIXEL_IN_PANEL(panel, P(i  , j  ))] = 0;
+            v[PIXEL_IN_PANEL(panel, P(i+1, j  ))] = 0;
+            v[PIXEL_IN_PANEL(panel, P(i  , j+1))] = 0;
+            v[PIXEL_IN_PANEL(panel, P(i+1, j+1))] = 0;
         }
 
         void update_heights() {
             for (uint8_t panel = 0; panel < PANELS; panel++) {
                 for (int8_t i = 0; i < LEDS_PER_ROW; i++) {
                     for (int8_t j = 0; j < LEDS_PER_ROW; j++) {
-                        auto e = height[panel][MIN(i+1, LEDS_PER_ROW-1)][j];
-                        auto w = height[panel][MAX(i-1, 0)][j];
-                        auto n = height[panel][i][MIN(j+1, LEDS_PER_ROW-1)];
-                        auto s = height[panel][i][MAX(j-1, 0)];
+                        auto l = height[ left(panel, i, j)];
+                        auto r = height[right(panel, i, j)];
+                        auto u = height[   up(panel, i, j)];
+                        auto d = height[ down(panel, i, j)];
 
-                        v[panel][i][j] += ((n+e+s+w)/4 - height[panel][i][j]);
-                        v[panel][i][j] *= 0.70;
-                        height[panel][i][j] += v[panel][i][j];
-                        height[panel][i][j] = MAX(32, height[panel][i][j] - 0.25);
+                        uint16_t idx = PIXEL_IN_PANEL(panel, P(i,j));
+
+                        v[idx] += ((l+r+u+d)/4 - height[idx]);
+                        v[idx] *= 0.70;
+                        height[idx] += v[idx];
+                        height[idx] = MAX(32, height[idx] - 1.50);
                     }
                 }
             }
@@ -497,8 +583,8 @@ class HeightfieldRipple : public Pattern {
             for (uint8_t panel = 0; panel < PANELS; panel++) {
                 for (int8_t i = 0; i < LEDS_PER_ROW; i++) {
                     for (int8_t j = 0; j < LEDS_PER_ROW; j++) {
-                        height[panel][i][j] = 64;
-                        v[panel][i][j] = 0;
+                        height[PIXEL_IN_PANEL(panel, P(i, j))] = 64;
+                             v[PIXEL_IN_PANEL(panel, P(i, j))] = 0;
                     }
                 }
             }
@@ -507,15 +593,16 @@ class HeightfieldRipple : public Pattern {
         void show() override {
             uint64_t cur = get_millisecond_timer();
             if (cur-last > 1000/PANELS) {
-                droplet(curpanel);
+                uint8_t panel = random8(PANELS);
+                droplet(panel);
                 last = cur;
-                curpanel = (curpanel+1) % PANELS;
             }
             for (uint8_t panel = 0; panel < PANELS; panel++) {
                 for (int8_t i = 0; i < LEDS_PER_ROW; i++) {
                     for (int8_t j = 0; j < LEDS_PER_ROW; j++) {
-                        uint8_t bright = constrain(height[panel][i][j], 0, 255);
-                        leds[PIXEL_IN_PANEL(panel, P(i,j))] = CHSV(gHue, 255, bright);
+                        uint16_t idx = PIXEL_IN_PANEL(panel, P(i,j));
+                        uint8_t bright = constrain(height[idx], 0, 255);
+                        leds[idx] = CHSV(gHue, 255, bright);
                     }
                 }
             }
